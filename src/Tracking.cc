@@ -956,7 +956,7 @@ void Tracking::MonocularInitialization()
             {
                 if(mvIniMatches[i]>=0 && !vbTriangulated[i])
                 {
-                    mvIniMatches[i]=-1;
+                    mvIniMatches[i]=-1;  // 把这个点的匹配关系设成-1，表示没有匹配
                     nmatches--;
                 }
             }
@@ -1014,7 +1014,7 @@ void Tracking::CreateInitialMapMonocular()
 
         // Step 3.1 用3D点构造MapPoint
         MapPoint* pMP = new MapPoint(
-            worldPos,
+            worldPos,   
             pKFcur, 
             mpMap);
 
@@ -1024,7 +1024,7 @@ void Tracking::CreateInitialMapMonocular()
         // c.该MapPoint的平均观测方向和深度范围
 
         // 表示该KeyFrame的2D特征点和对应的3D地图点
-        pKFini->AddMapPoint(pMP,i);
+        pKFini->AddMapPoint(pMP,i);  // i是特征点索引
         pKFcur->AddMapPoint(pMP,mvIniMatches[i]);
 
         // a.表示该MapPoint可以被哪个KeyFrame的哪个特征点观测到

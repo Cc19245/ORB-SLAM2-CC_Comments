@@ -77,7 +77,7 @@ Initializer::Initializer(const Frame &ReferenceFrame, float sigma, int iteration
  * @param[in] vMatches12            当前帧（2）和参考帧（1）图像中特征点的匹配关系
  *                                  vMatches12[i]解释：i表示帧1中关键点的索引值，vMatches12[i]的值为帧2的关键点索引值
  *                                  没有匹配关系的话，vMatches12[i]值为 -1
- * @param[in & out] R21                   相机从参考帧到当前帧的旋转
+ * @param[in & out] R21                   相机从参考帧到当前帧的旋转，相当于世界坐标系到相机坐标系的转换关系
  * @param[in & out] t21                   相机从参考帧到当前帧的平移
  * @param[in & out] vP3D                  三角化测量之后的三维地图点
  * @param[in & out] vbTriangulated        标记三角化点是否有效，有效为true
@@ -184,6 +184,7 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     //这两个是经过RANSAC算法后计算出来的单应矩阵和基础矩阵
     cv::Mat H, F; 
 
+
     // 构造线程来计算H矩阵及其得分
     // thread方法比较特殊，在传递引用的时候，外层需要用ref来进行引用传递，否则就是浅拷贝
     thread threadH(&Initializer::FindHomography,	//该线程的主函数
@@ -268,7 +269,7 @@ void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, c
 
     // Iteration variables
 	//某次迭代中，参考帧的特征点坐标
-    vector<cv::Point2f> vPn1i(8);
+    vector<cv::Point2f> vPn1i(8);   // 后面的i是第i次迭代的意思，这里就是一个标注
 	//某次迭代中，当前帧的特征点坐标
     vector<cv::Point2f> vPn2i(8);
 	//以及计算出来的单应矩阵、及其逆矩阵
@@ -378,6 +379,19 @@ void Initializer::FindFundamental(vector<bool> &vbMatchesInliers, float &score, 
     // 每次RANSAC记录的Inliers与得分
     vector<bool> vbCurrentInliers(N,false);
     float currentScore;
+
+    /*CC：RANSAC的思想：选出内点，排除外点，使用内点进行数据拟合。
+            每一次都随机选择可以进行数据拟合的最小数据个数，比如对于F和H来说，都是使用8点法。
+            对每次拟合出的结果，使用这个结果遍历所有的数据，计算这些数据的误差。并且设定一个阈值（这里用的是卡方检验），
+            如果误差超过阈值，那么这个数据点被标记为外点。如果误差小于阈值，那么计算得分（最简单的误差和得分成反比）。
+            
+            迭代N次（N到底怎么选实际上是可以算出来的，这里直接取了固定值200），就会得到N个拟合结果，选这些拟合结果中
+            得分最高的那个作为最后拟合的结果。
+
+            实际上最后一步还应该把上面选择的拟合结果中所有的内点作为数据，再次拟合一次模型。这样就相当于排除了外点，使用
+            内点进行拟合。这个时候用的就是最小二乘法。但是本程序好像没有这么做，只是使用8个点计算出来一个得分最高的拟合模型之后，
+            就直接使用这个模型的拟合结果了。
+    */
 
     // Perform all RANSAC iterations and save the solution with highest score
     // 下面进行每次的RANSAC迭代
@@ -829,7 +843,7 @@ float Initializer::CheckFundamental(
         const float b2 = f21*u1+f22*v1+f23;
         const float c2 = f31*u1+f32*v1+f33;
     
-        // Step 2.3 计算误差 e = (a * p2.x + b * p2.y + c) /  sqrt(a * a + b * b)
+        // Step 2.3 计算误差 e = (a * p2.x + b * p2.y + c) /  sqrt(a * a + b * b)，就是点到直线的距离公式
         const float num2 = a2*u2+b2*v2+c2;
         const float squareDist1 = num2*num2/(a2*a2+b2*b2);
         // 带权重误差
@@ -842,7 +856,7 @@ float Initializer::CheckFundamental(
             bIn = false;
         else
             // 误差越大，得分越低
-            score += thScore - chiSquare1;
+            score += thScore - chiSquare1;  // 这里必须使用和计算H的时候一样的thScore，不然二者得分就没有比较性了
 
         // 计算img2上的点在 img1 上投影得到的极线 l1= p2 * F21 = (a1,b1,c1)
         const float a1 = f11*u2+f21*v2+f31;
@@ -909,7 +923,7 @@ bool Initializer::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv:
     // 因为 CreateInitialMapMonocular 函数对3D点深度会缩放，然后反过来对 t 有改变.
     //注意下文中的符号“'”表示矩阵的转置
     //                          |0 -1  0|
-    // E = U Sigma V'   let W = |1  0  0|
+    // E = U Sigma V'   let W = |1  0  0|   这个就是十四讲课本里绕Z轴旋转90°的那个旋转矩阵
     //                          |0  0  1|
     // 得到4个解 E = [R|t]
     // R1 = UWV' R2 = UW'V' t1 = U3 t2 = -U3
@@ -1073,7 +1087,7 @@ bool Initializer::ReconstructH(vector<bool> &vbMatchesInliers, cv::Mat &H21, cv:
     // 统计匹配的特征点对中属于内点(Inlier)或有效点个数
     int N=0;
     for(size_t i=0, iend = vbMatchesInliers.size() ; i<iend; i++)
-        if(vbMatchesInliers[i])
+        if(vbMatchesInliers[i])  // 如果是true，那么就是内点
             N++;
 
     // We recover 8 motion hypotheses using the method of Faugeras et al.
@@ -1566,7 +1580,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
 	//最终结果是K*[R|t]
     P2 = K*P2;
     // 第二个相机的光心在世界坐标系下的坐标
-    cv::Mat O2 = -R.t()*t;
+    cv::Mat O2 = -R.t()*t;  // 注意R和t是1到2的坐标变换矩阵，也就是1的位姿在2坐标系下的表示。所以这里算2到1的表示，就是求逆
 
 	//在遍历开始前，先将good点计数设置为0
     int nGood=0;
@@ -1689,6 +1703,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
 		// 作者的做法：如果经过检验过后的有效3D点小于50个，那么就取最后那个最小的视差角(cos值最大)
 		// 如果大于50个，就取排名第50个的较小的视差角即可，为了避免3D点太多时出现太小的视差角 
         size_t idx = min(50,int(vCosParallax.size()-1));
+
 		//将这个选中的角弧度制转换为角度制
         parallax = acos(vCosParallax[idx])*180/CV_PI;
     }

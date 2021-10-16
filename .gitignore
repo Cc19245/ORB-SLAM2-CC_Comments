@@ -24,4 +24,5 @@ doc/
 *~
 lib/
 */html/
+*.pdf
 
