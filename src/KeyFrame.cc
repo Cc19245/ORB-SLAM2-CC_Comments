@@ -38,7 +38,7 @@ namespace ORB_SLAM2
 {
 
 // 下一个关键帧的id
-long unsigned int KeyFrame::nNextId=0;
+long unsigned int KeyFrame::nNextId=0;  // 注意这个变量是static变量，也就是所有KeyFrame对象都公用这一个变量
 
 //关键帧的构造函数
 KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
@@ -67,7 +67,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     {
         mGrid[i].resize(mnGridRows);
         for(int j=0; j<mnGridRows; j++)
-            mGrid[i][j] = F.mGrid[i][j];
+            mGrid[i][j] = F.mGrid[i][j];  // 这个索引的结果是一个vector
     }
 
     // 设置当前关键帧的位姿

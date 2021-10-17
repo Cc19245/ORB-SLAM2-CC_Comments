@@ -986,6 +986,7 @@ void Tracking::MonocularInitialization()
 void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames 认为单目初始化时候的参考帧和当前帧都是关键帧
+    // 注意mpMap是一个全局地图句柄，表明这个关键之是属于某个全局地图的？
     KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB);  // 第一帧
     KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);  // 第二帧
 
@@ -1014,8 +1015,8 @@ void Tracking::CreateInitialMapMonocular()
 
         // Step 3.1 用3D点构造MapPoint
         MapPoint* pMP = new MapPoint(
-            worldPos,   
-            pKFcur, 
+            worldPos,     // 地图点的世界坐标
+            pKFcur,       // 生成该地图点的关键帧
             mpMap);
 
         // Step 3.2 为该MapPoint添加属性：

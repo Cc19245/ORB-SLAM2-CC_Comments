@@ -324,6 +324,9 @@ public:
 	//TODO 这里它所说的话还不是很理解。尤其是后面的一句。
     //而且,这个阈值不应该是在哪个帧中都一样吗?
     ///判断远点和近点的深度阈值
+    // 这里的意思是有的时候使用双目计算出来的深度信息非常大，这个时候认为是不准确的，这个阈值就是大于
+    // mThDepth * 基线距离的时候认为不准确，那么这个时候就把这张图片当做一张单目的图片来进行处理。
+    // 也就是不使用双目估计出来的深度信息。
     float mThDepth;
 
     // Number of KeyPoints.
@@ -400,6 +403,7 @@ public:
     // FRAME_GRID_ROWS 48
     // FRAME_GRID_COLS 64
 	///这个向量中存储的是每个图像网格内特征点的id（左图）
+    // CC：这是一个数组，然后数组中的元素都是std::vector
     std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
     /** @} */
@@ -414,6 +418,7 @@ public:
 
     // Reference Keyframe.
     // 普通帧与自己共视程度最高的关键帧作为参考关键帧
+    // 貌似在地图点中也存在参考关键帧？参考关键帧到底是什么？
     KeyFrame* mpReferenceKF;
 
     /**

@@ -377,7 +377,7 @@ void MapPoint::ComputeDistinctiveDescriptors()
         observations=mObservations;
     }
 
-    if(observations.empty())
+    if(observations.empty())  // 这个地图点没有被任何关键帧观测到
         return;
 
     vDescriptors.reserve(observations.size());
@@ -389,9 +389,9 @@ void MapPoint::ComputeDistinctiveDescriptors()
         // mit->second取该地图点在关键帧中的索引
         KeyFrame* pKF = mit->first;
 
-        if(!pKF->isBad())        
+        if(!pKF->isBad())       // 如果这个关键帧还是好的，说明没有被删除
             // 取对应的描述子向量                                               
-            vDescriptors.push_back(pKF->mDescriptors.row(mit->second));     
+            vDescriptors.push_back(pKF->mDescriptors.row(mit->second));    // 按照索引，寻找关键帧中对应序号的描述子 
     }
 
     if(vDescriptors.empty())
@@ -431,10 +431,10 @@ void MapPoint::ComputeDistinctiveDescriptors()
 		sort(vDists.begin(), vDists.end());
 
         // 获得中值
-        int median = vDists[0.5*(N-1)];
+        int median = vDists[0.5*(N-1)]; // 对第i个描述子，计算它和其他描述子距离的中值
         
         // 寻找最小的中值
-        if(median<BestMedian)
+        if(median<BestMedian)  // 对所有描述子，比较中值的大小，选择最小的那一个
         {
             BestMedian = median;
             BestIdx = i;
@@ -493,7 +493,7 @@ void MapPoint::UpdateNormalAndDepth()
 {
     // Step 1 获得观测到该地图点的所有关键帧、坐标等信息
     map<KeyFrame*,size_t> observations;
-    KeyFrame* pRefKF;
+    KeyFrame* pRefKF;  // 参考关键帧
     cv::Mat Pos;
     {
         unique_lock<mutex> lock1(mMutexFeatures);
@@ -516,14 +516,15 @@ void MapPoint::UpdateNormalAndDepth()
     int n=0;
     for(map<KeyFrame*,size_t>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
     {
-        KeyFrame* pKF = mit->first;
-        cv::Mat Owi = pKF->GetCameraCenter();
+        KeyFrame* pKF = mit->first;       // 观测到这个地图点的关键帧
+        cv::Mat Owi = pKF->GetCameraCenter(); // 观测到这个地图点的关键帧所在坐标系原点在世界坐标系下的位置
         // 获得地图点和观测到它关键帧的向量并归一化
-        cv::Mat normali = mWorldPos - Owi;
-        normal = normal + normali/cv::norm(normali);                       
+        cv::Mat normali = mWorldPos - Owi;  // 关键帧坐标系原点指向地图点的向量
+        normal = normal + normali/cv::norm(normali);    // 向量归一化然后求和                   
         n++;
     } 
 
+    // 这个计算的是地图点在参考关键帧下的位置，对应的dist也是地图点在参考关键帧下的距离
     cv::Mat PC = Pos - pRefKF->GetCameraCenter();                           // 参考关键帧相机指向地图点的向量（在世界坐标系下的表示）
     const float dist = cv::norm(PC);                                        // 该点到参考关键帧相机的距离
     const int level = pRefKF->mvKeysUn[observations[pRefKF]].octave;        // 观测到该地图点的当前帧的特征点在金字塔的第几层
