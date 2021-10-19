@@ -617,7 +617,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
         // Step 3 遍历搜索搜索窗口中的所有潜在的匹配候选点，找到最优的和次优的
         for(vector<size_t>::iterator vit=vIndices2.begin(); vit!=vIndices2.end(); vit++)
         {
-            size_t i2 = *vit;
+            size_t i2 = *vit;  // i2是帧2中特征点对应的索引
             // 取出候选特征点对应的描述子
             cv::Mat d2 = F2.mDescriptors.row(i2);
             // 计算两个特征点描述子距离
@@ -667,17 +667,16 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
                         rot+=360.0f;
                     // 前面factor = HISTO_LENGTH/360.0f 
                     // bin = rot / 360.of * HISTO_LENGTH 表示当前rot被分配在第几个直方图bin  
-                    int bin = round(rot*factor);
+                    int bin = round(rot*factor); // round四舍五入，最大到30
                     // 如果bin 满了又是一个轮回
-                    if(bin==HISTO_LENGTH)
+                    if(bin==HISTO_LENGTH)  // 分类有30中，但是分类的索引只能是0-29
                         bin=0;
                     assert(bin>=0 && bin<HISTO_LENGTH);
                     rotHist[bin].push_back(i1);
                 }
             }
         }
-
-    }
+    }// 至此，对1中的每一个特征点，都在2中为其找了一个该特征点周围区域内的一个最佳匹配
 
     // Step 6 筛除旋转直方图中“非主流”部分
     if(mbCheckOrientation)
@@ -695,8 +694,8 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
             // 剔除掉不在前三的匹配对，因为他们不符合“主流旋转方向”    
             for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
             {
-                int idx1 = rotHist[i][j];
-                if(vnMatches12[idx1]>=0)
+                int idx1 = rotHist[i][j];  // 选出这个直方图中的一个匹配关系的索引
+                if(vnMatches12[idx1]>=0)   // 如果这个有匹配关系
                 {
                     vnMatches12[idx1]=-1;
                     nmatches--;
@@ -709,7 +708,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
     //Update prev matched
     // Step 7 将最后通过筛选的匹配好的特征点保存到vbPrevMatched
     for(size_t i1=0, iend1=vnMatches12.size(); i1<iend1; i1++)
-        if(vnMatches12[i1]>=0)
+        if(vnMatches12[i1]>=0)  // 不知道这个赋值有什么意义，这样只是把1中特征点坐标改成了2中匹配的特征点坐标，变成了1.2坐标的混合
             vbPrevMatched[i1]=F2.mvKeysUn[vnMatches12[i1]].pt;
 
     return nmatches;
@@ -2040,7 +2039,7 @@ void ORBmatcher::ComputeThreeMaxima(vector<int>* histo, const int L, int &ind1, 
     for(int i=0; i<L; i++)
     {
         const int s = histo[i].size();
-        if(s>max1)
+        if(s>max1)  // 这里就是排序直方图中的数据大小
         {
             max3=max2;
             max2=max1;

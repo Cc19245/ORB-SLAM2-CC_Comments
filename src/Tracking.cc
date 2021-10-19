@@ -919,6 +919,7 @@ void Tracking::MonocularInitialization()
         // Step 3 在mInitialFrame与mCurrentFrame中找匹配的特征点对
         ORBmatcher matcher(
             0.9,        //最佳的和次佳特征点评分的比值阈值，这里是比较宽松的，跟踪时一般是0.7
+            // 这个值越小，说明对特征点的匹配要求越严格
             true);      //检查特征点的方向
 
         // 对 mInitialFrame,mCurrentFrame 进行特征点匹配
@@ -1040,7 +1041,7 @@ void Tracking::CreateInitialMapMonocular()
         //Fill Current Frame structure
         //mvIniMatches下标i表示在初始化参考帧中的特征点的序号
         //mvIniMatches[i]是初始化当前帧中的特征点的序号
-        mCurrentFrame.mvpMapPoints[mvIniMatches[i]] = pMP;
+        mCurrentFrame.mvpMapPoints[mvIniMatches[i]] = pMP;  // 设置当前帧（注意不是关键帧）中特征点对应的关键帧
         mCurrentFrame.mvbOutlier[mvIniMatches[i]] = false;
 
         //Add to Map

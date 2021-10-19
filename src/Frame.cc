@@ -660,6 +660,8 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const f
                 const float distx = kpUn.pt.x-x;
                 const float disty = kpUn.pt.y-y;
 
+                // CC：为什么这里要求距离这么严格？实际上一个网格最多10个像素，这里要求特征点必须在网格的r范围之内，
+                // 意义很大吗?
 				// 如果x方向和y方向的距离都在指定的半径之内，存储其index为候选特征点
                 if(fabs(distx)<r && fabs(disty)<r)
                     vIndices.push_back(vCell[j]);
