@@ -176,12 +176,12 @@ void MapPoint::EraseObservation(KeyFrame* pKF)
         if(mObservations.count(pKF))
         {
             int idx = mObservations[pKF];
-            if(pKF->mvuRight[idx]>=0)
+            if(pKF->mvuRight[idx]>=0)  // 双目或者rgbd
                 nObs-=2;
             else
                 nObs--;
 
-            mObservations.erase(pKF);
+            mObservations.erase(pKF);  // 从观测关系中删除这个关键帧
 
             // 如果该keyFrame是参考帧，该Frame被删除后重新指定RefFrame
             if(mpRefKF==pKF)
@@ -540,6 +540,7 @@ void MapPoint::UpdateNormalAndDepth()
     }
 }
 
+// 得到最小不变形
 float MapPoint::GetMinDistanceInvariance()
 {
     unique_lock<mutex> lock(mMutexPos);

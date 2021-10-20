@@ -88,7 +88,7 @@ void KeyFrame::ComputeBoW()
     }
 }
 
-// 设置当前关键帧的位姿
+// 设置当前关键帧的位姿，因为输入的是世界坐标系到相机坐标系的T，这里要转换成相机坐标系在世界坐标系下的表示
 void KeyFrame::SetPose(const cv::Mat &Tcw_)
 {
     unique_lock<mutex> lock(mMutexPose);
@@ -116,7 +116,7 @@ void KeyFrame::SetPose(const cv::Mat &Tcw_)
 cv::Mat KeyFrame::GetPose()
 {
     unique_lock<mutex> lock(mMutexPose);
-    return Tcw.clone();
+    return Tcw.clone();  // 注意这里是clone深拷贝
 }
 
 // 获取位姿的逆
@@ -167,7 +167,8 @@ void KeyFrame::AddConnection(KeyFrame *pKF, const int &weight)
         unique_lock<mutex> lock(mMutexConnections);
 
         // 新建或更新连接权重
-        if(!mConnectedKeyFrameWeights.count(pKF))   // count是STL库中的方法，就是查找了这个map里有没有这个key
+        // count是STL库中的算法，查找里面有没有这个变量
+        if(!mConnectedKeyFrameWeights.count(pKF)) 
             // count函数返回0，说明mConnectedKeyFrameWeights中没有pKF，新建连接
             mConnectedKeyFrameWeights[pKF]=weight;
         else if(mConnectedKeyFrameWeights[pKF]!=weight) 
@@ -303,7 +304,7 @@ int KeyFrame::GetWeight(KeyFrame *pKF)
 void KeyFrame::AddMapPoint(MapPoint *pMP, const size_t &idx)
 {
     unique_lock<mutex> lock(mMutexFeatures);
-    mvpMapPoints[idx]=pMP;
+    mvpMapPoints[idx]=pMP;  // mvpMapPoints 保存了当前帧的地图点，
 }
 
 
@@ -423,6 +424,7 @@ void KeyFrame::UpdateConnections()
     //Increase counter for those keyframes
     // Step 1 通过地图点被关键帧观测来间接统计关键帧之间的共视程度
     // 遍历这个关键帧中的所有地图点。统计每一个地图点都有多少关键帧与当前关键帧存在共视关系，统计结果放在KFcounter
+
     for(vector<MapPoint*>::iterator vit=vpMP.begin(), vend=vpMP.end(); vit!=vend; vit++)
     {
         MapPoint* pMP = *vit;
@@ -494,11 +496,12 @@ void KeyFrame::UpdateConnections()
         // 那就只更新与其它关键帧共视程度最高的关键帧的mConnectedKeyFrameWeights
         // 这是对之前th这个阈值可能过高的一个补丁
         vPairs.push_back(make_pair(nmax,pKFmax));
-        pKFmax->AddConnection(this,nmax);
+        pKFmax->AddConnection(this,nmax);  // 找到的权重最大的对方关键帧，加入连接
     }
 
     //  Step 4 对满足共视程度的关键帧对更新连接关系及权重（从大到小）
     // vPairs里存的都是相互共视程度比较高的关键帧和共视权重，接下来由大到小进行排序
+    // 注意这里vParis中包含已经是权重>15这个阈值的关键帧了，其他<15的都没有被加入
     sort(vPairs.begin(),vPairs.end());         // sort函数默认升序排列
     // 将排序后的结果分别组织成为两种数据类型
     list<KeyFrame*> lKFs;
@@ -515,9 +518,11 @@ void KeyFrame::UpdateConnections()
 
         // mspConnectedKeyFrames = spConnectedKeyFrames;
         // 更新当前帧与其它关键帧的连接权重
-        mConnectedKeyFrameWeights = KFcounter;  // 这里面存储的和其他关键帧的关系有的是不满足共识图的关系的，只是记录了和其他关键帧的共识权重，并没有筛选阈值
-        // 而下面这两个变量里存储的都是>15这个阈值的关键帧
-        mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());  
+        // 注意这里才更新当前帧和其他帧的连接关系！
+        // CC：问题：这里是把所有的共识关系都加进去了啊，因为KFcounter中包含阈值<15的共视关系，这里不是全加进去了吗？
+        // 而添加其他帧的共视关系的时候，只是增加了权重>15的共视关系，这样二者不就不对等了吗？
+        mConnectedKeyFrameWeights = KFcounter;
+        mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
         mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 
         // Step 5 更新生成树的连接
@@ -597,11 +602,12 @@ set<KeyFrame*> KeyFrame::GetLoopEdges()
 void KeyFrame::SetNotErase()
 {
     unique_lock<mutex> lock(mMutexConnections);
-    mbNotErase = true;
+    mbNotErase = true;  // 参与回环检测的关键帧具有不被删除的特权，设置这个标志为true具有这个特权，标志这个关键帧正在
+    // 参与回环检测，暂时不要删除这个关键帧
 }
 
 /**
- * @brief 删除当前的这个关键帧,表示不进行回环检测过程;由回环检测线程调用
+ * @brief 删除当前的这个关键帧,表示不进行回环检测过程;   由回环检测线程调用
  * 
  */
 void KeyFrame::SetErase()
@@ -617,7 +623,7 @@ void KeyFrame::SetErase()
     }
 
     // mbToBeErased：删除之前记录的想要删但时机不合适没有删除的帧
-    if(mbToBeErased)
+    if(mbToBeErased)  
     {
         SetBadFlag();
     }
@@ -640,7 +646,7 @@ void KeyFrame::SetBadFlag()
         // 第0关键帧不允许被删除
         if(mnId==0)
             return;
-        else if(mbNotErase)
+        else if(mbNotErase)  // 如果设置了暂时不要删除的标志，那么就把待删除标志mbToBeErased设置为true
         {
             // mbNotErase表示不应该删除，于是把mbToBeErased置为true，假装已经删除，其实没有删除
             mbToBeErased = true;
@@ -675,6 +681,7 @@ void KeyFrame::SetBadFlag()
         // Assign at each iteration one children with a parent (the pair with highest covisibility weight)
         // Include that children as new parent candidate for the rest
         // 每迭代一次就为其中一个子关键帧寻找父关键帧（最高共视程度），找到父的子关键帧可以作为其他子关键帧的候选父关键帧
+        // 遍历当前帧的所有子关键帧，为每一帧寻找父关键帧
         while(!mspChildrens.empty())
         {
             bool bContinue = false;
@@ -698,12 +705,13 @@ void KeyFrame::SetBadFlag()
                 for(size_t i=0, iend=vpConnected.size(); i<iend; i++)
                 {
                     // sParentCandidates 中刚开始存的是这里子关键帧的“爷爷”，也是当前关键帧的候选父关键帧
+                    // 然后遍历候选的父关键帧
                     for(set<KeyFrame*>::iterator spcit=sParentCandidates.begin(), spcend=sParentCandidates.end(); spcit!=spcend; spcit++)
                     {
                         // Step 4.3 如果孩子和sParentCandidates中有共视，选择共视最强的那个作为新的父
-                        if(vpConnected[i]->mnId == (*spcit)->mnId)
+                        if(vpConnected[i]->mnId == (*spcit)->mnId)  // 子关键帧的共视关键帧中有候选父关键帧
                         {
-                            int w = pKF->GetWeight(vpConnected[i]);
+                            int w = pKF->GetWeight(vpConnected[i]);  // 记录他们的连接关系
                             // 寻找并更新权值最大的那个共视关系
                             if(w>max)
                             {
@@ -742,9 +750,9 @@ void KeyFrame::SetBadFlag()
                 (*sit)->ChangeParent(mpParent);
             }
 
-        mpParent->EraseChild(this);
+        mpParent->EraseChild(this);  // 父关键帧中删除当前这个子关键帧
         // mTcp 表示原父关键帧到当前关键帧的位姿变换，在保存位姿的时候使用
-        mTcp = Tcw*mpParent->GetPoseInverse();
+        mTcp = Tcw*mpParent->GetPoseInverse();  // 这是干什么的？
         // 标记当前关键帧已经挂了
         mbBad = true;
     }  
@@ -771,7 +779,7 @@ void KeyFrame::EraseConnection(KeyFrame* pKF)
         unique_lock<mutex> lock(mMutexConnections);
         if(mConnectedKeyFrameWeights.count(pKF))
         {
-            mConnectedKeyFrameWeights.erase(pKF);
+            mConnectedKeyFrameWeights.erase(pKF);  // erase就是STL库函数，在库函数里删除这个变量
             bUpdate=true;
         }
     }
