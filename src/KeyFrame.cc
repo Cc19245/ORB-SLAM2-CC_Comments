@@ -167,7 +167,7 @@ void KeyFrame::AddConnection(KeyFrame *pKF, const int &weight)
         unique_lock<mutex> lock(mMutexConnections);
 
         // 新建或更新连接权重
-        if(!mConnectedKeyFrameWeights.count(pKF)) 
+        if(!mConnectedKeyFrameWeights.count(pKF))   // count是STL库中的方法，就是查找了这个map里有没有这个key
             // count函数返回0，说明mConnectedKeyFrameWeights中没有pKF，新建连接
             mConnectedKeyFrameWeights[pKF]=weight;
         else if(mConnectedKeyFrameWeights[pKF]!=weight) 
@@ -422,30 +422,31 @@ void KeyFrame::UpdateConnections()
     //For all map points in keyframe check in which other keyframes are they seen
     //Increase counter for those keyframes
     // Step 1 通过地图点被关键帧观测来间接统计关键帧之间的共视程度
-    // 统计每一个地图点都有多少关键帧与当前关键帧存在共视关系，统计结果放在KFcounter
+    // 遍历这个关键帧中的所有地图点。统计每一个地图点都有多少关键帧与当前关键帧存在共视关系，统计结果放在KFcounter
     for(vector<MapPoint*>::iterator vit=vpMP.begin(), vend=vpMP.end(); vit!=vend; vit++)
     {
         MapPoint* pMP = *vit;
 
-        if(!pMP)
+        if(!pMP)  // 地图点为空？什么意思
             continue;
 
-        if(pMP->isBad())
+        if(pMP->isBad())  // 地图点是坏点，即将被删除
             continue;
 
         // 对于每一个地图点，observations记录了可以观测到该地图点的所有关键帧
-        map<KeyFrame*,size_t> observations = pMP->GetObservations();
+        map<KeyFrame*,size_t> observations = pMP->GetObservations();  // 观测到该MapPoint的KF和该MapPoint在KF中的索引
 
+        // 地图点中存储了可以观测到这个地图点的关键帧信息，所以再遍历这个map，得到能观测到这个地图点的所有关键帧
         for(map<KeyFrame*,size_t>::iterator mit=observations.begin(), mend=observations.end(); mit!=mend; mit++)
         {
             // 除去自身，自己与自己不算共视
-            if(mit->first->mnId==mnId)
+            if(mit->first->mnId==mnId)  // 关键帧的id等于当前这个关键帧的id，说明是自己
                 continue;
             // 这里的操作非常精彩！
             // map[key] = value，当要插入的键存在时，会覆盖键对应的原来的值。如果键不存在，则添加一组键值对
             // mit->first 是地图点看到的关键帧，同一个关键帧看到的地图点会累加到该关键帧计数
             // 所以最后KFcounter 第一个参数表示某个关键帧，第2个参数表示该关键帧看到了多少当前帧的地图点，也就是共视程度
-            KFcounter[mit->first]++;
+            KFcounter[mit->first]++;  // 这就是一种侧面的操作，统计当前帧的每一个地图点，被其他关键帧观测到，然后统计共视地图点的个数
         }
     }
 
@@ -463,7 +464,7 @@ void KeyFrame::UpdateConnections()
 
     // vPairs记录与其它关键帧共视帧数大于th的关键帧
     // pair<int,KeyFrame*>将关键帧的权重写在前面，关键帧写在后面方便后面排序
-    vector<pair<int,KeyFrame*> > vPairs;
+    vector<pair<int,KeyFrame*> > vPairs;  // 这里为什么不用map，而又换成pair呢？
     vPairs.reserve(KFcounter.size());
     // Step 2 找到对应权重最大的关键帧（共视程度最高的关键帧）
     for(map<KeyFrame*,int>::iterator mit=KFcounter.begin(), mend=KFcounter.end(); mit!=mend; mit++)
@@ -482,7 +483,7 @@ void KeyFrame::UpdateConnections()
             // 对方关键帧也要添加这个信息
             // 更新KFcounter中该关键帧的mConnectedKeyFrameWeights
             // 更新其它KeyFrame的mConnectedKeyFrameWeights，更新其它关键帧与当前帧的连接权重
-            (mit->first)->AddConnection(this,mit->second);
+            (mit->first)->AddConnection(this,mit->second);  // mit->first是和当前帧满足公式关系的那一帧，那一帧也要添加和当前帧的共视关系
         }
     }
 
@@ -509,23 +510,24 @@ void KeyFrame::UpdateConnections()
         lWs.push_front(vPairs[i].first);
     }
 
-    {
+    {  // {}内的程序是加锁的，这也是{}出现在这里一个看起来比较奇怪的地方
         unique_lock<mutex> lockCon(mMutexConnections);
 
         // mspConnectedKeyFrames = spConnectedKeyFrames;
         // 更新当前帧与其它关键帧的连接权重
-        mConnectedKeyFrameWeights = KFcounter;
-        mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
+        mConnectedKeyFrameWeights = KFcounter;  // 这里面存储的和其他关键帧的关系有的是不满足共识图的关系的，只是记录了和其他关键帧的共识权重，并没有筛选阈值
+        // 而下面这两个变量里存储的都是>15这个阈值的关键帧
+        mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());  
         mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 
         // Step 5 更新生成树的连接
         if(mbFirstConnection && mnId!=0)
         {
             // 初始化该关键帧的父关键帧为共视程度最高的那个关键帧
-            mpParent = mvpOrderedConnectedKeyFrames.front();
+            mpParent = mvpOrderedConnectedKeyFrames.front();  // front是最前面那个关键帧，因为经过了排序，也是共视点最多的那个关键帧
             // 建立双向连接关系，将当前关键帧作为其子关键帧
             mpParent->AddChild(this);
-            mbFirstConnection = false;
+            mbFirstConnection = false;  // 这个变量指示关键帧是否被插入生成树中，因为一个关键帧只被插入一次到生成树中
         }
     }
 }
