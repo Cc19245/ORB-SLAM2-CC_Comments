@@ -487,7 +487,7 @@ void Tracking::Track()
                 CheckReplacedInLastFrame();
 
                 // Step 2.2 运动模型是空的或刚完成重定位，跟踪参考关键帧；否则恒速模型跟踪
-                // 第一个条件,如果运动模型为空,说明是刚初始化开始，或者已经跟丢了
+                // 第一个条件,如果运动速度为空,说明是刚初始化开始，或者已经跟丢了
                 // 第二个条件,如果当前帧紧紧地跟着在重定位的帧的后面，我们将重定位帧来恢复位姿
                 // mnLastRelocFrameId 上一次重定位的那一帧
                 if(mVelocity.empty() || mCurrentFrame.mnId<mnLastRelocFrameId+2)
@@ -504,7 +504,7 @@ void Tracking::Track()
                     // 通过投影的方式在参考帧中找当前帧特征点的匹配点
                     // 优化每个特征点所对应3D点的投影误差即可得到位姿
                     bOK = TrackWithMotionModel();
-                    if(!bOK)
+                    if(!bOK)   // 恒速跟踪失败，那么用参考帧跟踪的方法再跟踪一次
                         //根据恒速模型失败了，只能根据参考关键帧来跟踪
                         bOK = TrackReferenceKeyFrame();
                 }
@@ -928,7 +928,7 @@ void Tracking::MonocularInitialization()
         int nmatches = matcher.SearchForInitialization(
             mInitialFrame,mCurrentFrame,    //初始化时的参考帧和当前帧
             mvbPrevMatched,                 //在初始化参考帧中提取得到的特征点
-            mvIniMatches,                   //保存匹配关系
+            mvIniMatches,                   //保存匹配关系, 这里存储的是1中的特征点对应在2中的特征点的索引
             100);                           //搜索窗口大小
 
         // Check if there are enough correspondences
@@ -1162,6 +1162,7 @@ bool Tracking::TrackReferenceKeyFrame()
 {
     // Compute Bag of Words vector
     // Step 1：将当前帧的描述子转化为BoW向量
+    // 所谓BoW向量，就是对每一个特征点的描述子寻找它在词袋中对应的叶子节点的Id和权重，组成一个键值对，插入到std::map中
     mCurrentFrame.ComputeBoW();
 
     // We perform first an ORB matching with the reference keyframe
@@ -1171,9 +1172,10 @@ bool Tracking::TrackReferenceKeyFrame()
 
     // Step 2：通过词袋BoW加速当前帧与参考帧之间的特征点匹配
     int nmatches = matcher.SearchByBoW(
-        mpReferenceKF,          //参考关键帧
+        mpReferenceKF,          //参考关键帧    // 问题：去看这个参考关键帧是什么时候建立的？
         mCurrentFrame,          //当前帧
-        vpMapPointMatches);     //存储匹配关系
+        vpMapPointMatches);     //存储匹配关系，注意这里匹配的是当前帧中的所有特征点对应的地图点，匹配方法是如果当前帧中的某个特征点和参考帧中某个特征点描述子
+        // 接近，那么就把参考帧中匹配的特征点对应的地图点赋值给当前帧特征点对应的地图点。也就是使用3D点匹配2D点
 
     // 匹配数目小于15，认为跟踪失败
     if(nmatches<15)
@@ -1184,7 +1186,8 @@ bool Tracking::TrackReferenceKeyFrame()
     mCurrentFrame.SetPose(mLastFrame.mTcw); // 用上一次的Tcw设置初值，在PoseOptimization可以收敛快一些
 
     // Step 4:通过优化3D-2D的重投影误差来获得位姿
-    Optimizer::PoseOptimization(&mCurrentFrame);
+    // 3D点来自上面和关键帧的匹配得到的地图点，在数组中存储的位置就是对应的2D点的索引
+    Optimizer::PoseOptimization(&mCurrentFrame);   // 里面用的是g2o求解BA问题，一个优化问题
 
     // Discard outliers
     // Step 5：剔除优化后的匹配点中的外点
@@ -1192,7 +1195,7 @@ bool Tracking::TrackReferenceKeyFrame()
     int nmatchesMap = 0;
     for(int i =0; i<mCurrentFrame.N; i++)
     {
-        if(mCurrentFrame.mvpMapPoints[i])
+        if(mCurrentFrame.mvpMapPoints[i])  // 有地图点
         {
             //如果对应到的某个特征点是外点
             if(mCurrentFrame.mvbOutlier[i])
@@ -1227,7 +1230,7 @@ void Tracking::UpdateLastFrame()
     // 上一普通帧的参考关键帧，注意这里用的是参考关键帧（位姿准）而不是上上一帧的普通帧
     KeyFrame* pRef = mLastFrame.mpReferenceKF;  
     // ref_keyframe 到 lastframe的位姿变换
-    cv::Mat Tlr = mlRelativeFramePoses.back();
+    cv::Mat Tlr = mlRelativeFramePoses.back();  // mlRelativeFramePoses是一个vector
 
     // 将上一帧的世界坐标系下的位姿计算出来
     // l:last, r:reference, w:world
@@ -1336,7 +1339,8 @@ bool Tracking::TrackWithMotionModel()
     UpdateLastFrame();
 
     // Step 2：根据之前估计的速度，用恒速模型得到当前帧的初始位姿。
-    mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);
+    // 这个位姿是世界坐标系到当前帧的位姿
+    mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);  // mVelocity就是上一帧到当前帧的位姿变换矩阵，即Tcl
     
     // 清空当前帧的地图点
     fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
@@ -1344,7 +1348,7 @@ bool Tracking::TrackWithMotionModel()
     // Project points seen in previous frame
     // 设置特征匹配过程中的搜索半径
     int th;
-    if(mSensor!=System::STEREO)
+    if(mSensor!=System::STEREO) 
         th=15;//单目
     else
         th=7;//双目
@@ -1366,22 +1370,22 @@ bool Tracking::TrackWithMotionModel()
 
     // Optimize frame pose with all matches
     // Step 4：利用3D-2D投影关系，优化当前帧位姿
-    Optimizer::PoseOptimization(&mCurrentFrame);
+    Optimizer::PoseOptimization(&mCurrentFrame);  // 在BA优化的过程中，会把离群点标记为外点
 
     // Discard outliers
     // Step 5：剔除地图点中外点
     int nmatchesMap = 0;
-    for(int i =0; i<mCurrentFrame.N; i++)
+    for(int i =0; i<mCurrentFrame.N; i++)  // 遍历当前帧的所有特征点
     {
-        if(mCurrentFrame.mvpMapPoints[i])
+        if(mCurrentFrame.mvpMapPoints[i])  // 如果这个特征点有对应的地图点，才进一步检查这个点是不是外点
         {
             if(mCurrentFrame.mvbOutlier[i])
             {
                 // 如果优化后判断某个地图点是外点，清除它的所有关系
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
 
-                mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
-                mCurrentFrame.mvbOutlier[i]=false;
+                mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);  // 把地图点指针清空
+                mCurrentFrame.mvbOutlier[i]=false;  // 把外点标志复位
                 pMP->mbTrackInView = false;
                 pMP->mnLastFrameSeen = mCurrentFrame.mnId;
                 nmatches--;
@@ -2084,7 +2088,7 @@ bool Tracking::Relocalization()
                     4,      //最小集(求解这个问题在一次采样中所需要采样的最少的点的个数,对于Sim3是3,EPnP是4),参与到最小内点数的确定过程中
                     0.5,    //这个是表示(最小内点数/样本总数);实际上的RANSAC正常退出的时候所需要的最小内点数其实是根据这个量来计算得到的
                     5.991); // 自由度为2的卡方检验的阈值,程序中还会根据特征点所在的图层对这个阈值进行缩放
-                vpPnPsolvers[i] = pSolver;
+                vpPnPsolvers[i] = pSolver;   // 对每个关键帧，都得到了一个Pnpsolver，把这个加入到数组中
                 nCandidates++;
             }
         }

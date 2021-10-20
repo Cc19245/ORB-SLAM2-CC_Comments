@@ -1134,7 +1134,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
  */
 template<class TDescriptor, class F> 
 void TemplatedVocabulary<TDescriptor,F>::transform(
-  const std::vector<TDescriptor>& features,
+  const std::vector<TDescriptor>& features,  // 输入的描述子s
   BowVector &v, FeatureVector &fv, int levelsup) const
 {
   v.clear();
@@ -1169,8 +1169,9 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
       if(w > 0) // not stopped
       { 
         // 如果Word 权重大于0，将其添加到BowVector 和 FeatureVector
-        v.addWeight(id, w);
-        fv.addFeature(nid, i_feature);
+        v.addWeight(id, w);   // BowVector类型，继承于std::map，里面的键值对分别是叶子节点的word id和对应的权重
+        fv.addFeature(nid, i_feature);  // FeatureVector,继承于std::map，键是这个特征点对应的node id, 
+        //值是vector<int>，这个vector中存储的就是属于这个node id的所有特征点的索引
       }
     }
     
@@ -1192,7 +1193,8 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
       NodeId nid;
       WordValue w;
       // w is idf if IDF, or 1 if BINARY
-      transform(*fit, id, w, &nid, levelsup);
+      // 对于这种图像中的每一个特征点描述子，都在词袋中寻找它对应的叶子节点id和权重，还有在levelsup层的node Id
+      transform(*fit, id, w, &nid, levelsup);  // 对应的函数在1241行，transform有好几个重载的函数
       
       if(w > 0) // not stopped
       {
@@ -1248,7 +1250,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(const TDescriptor &feature,
   // m_L: depth levels, m_L = 6 in ORB-SLAM2
   // nid_level 当前特征点转化为的Word 所属的 node id，方便索引
   const int nid_level = m_L - levelsup;
-  if(nid_level <= 0 && nid != NULL) *nid = 0; // root
+  if(nid_level <= 0 && nid != NULL) *nid = 0; // root    //nid != NULL是指传入的这个nid指针是有效的指针
 
   NodeId final_id = 0; // root
   int current_level = 0;
@@ -1258,16 +1260,16 @@ void TemplatedVocabulary<TDescriptor,F>::transform(const TDescriptor &feature,
     // 更新树的深度
     ++current_level;
     // 取出当前节点所有子节点的id
-    nodes = m_nodes[final_id].children;
+    nodes = m_nodes[final_id].children;  // std::vector<Node> m_nodes; children是一个std::vector<NodeId>
     // 取子节点中第1个的id，用于后面距离比较的初始值
-    final_id = nodes[0];
+    final_id = nodes[0];  // final_id就是一个int整数，得到的就是第一个子节点的Id
 
     // 取当前节点第一个子节点的描述子距离初始化最佳（小）距离
     double best_d = F::distance(feature, m_nodes[final_id].descriptor);
     // 遍历nodes中所有的描述子，找到最小距离对应的描述子
     for(nit = nodes.begin() + 1; nit != nodes.end(); ++nit)
     {
-      NodeId id = *nit;
+      NodeId id = *nit;  // 就是一个整数
       double d = F::distance(feature, m_nodes[id].descriptor);
       if(d < best_d)
       {
@@ -1277,10 +1279,10 @@ void TemplatedVocabulary<TDescriptor,F>::transform(const TDescriptor &feature,
     }
     
     // 记录当前描述子转化为Word后所属的 node id，它距离叶子深度为levelsup
-    if(nid != NULL && current_level == nid_level)
+    if(nid != NULL && current_level == nid_level)  // 当前层是指定的levelsup那一层
       *nid = final_id;
     
-  } while( !m_nodes[final_id].isLeaf() );
+  } while( !m_nodes[final_id].isLeaf() );  // 直到找到最后的叶子节点
 
   // turn node id into word id
   // 取出 vocabulary tree中node距离当前feature 描述子距离最小的那个node的 Word id 和 weight

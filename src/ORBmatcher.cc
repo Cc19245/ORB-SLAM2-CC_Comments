@@ -250,10 +250,10 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
     const vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
 
     // 和普通帧F特征点的索引一致
-    vpMapPointMatches = vector<MapPoint*>(F.N,static_cast<MapPoint*>(NULL));
+    vpMapPointMatches = vector<MapPoint*>(F.N, static_cast<MapPoint*>(NULL));  // 这种写法是什么意思，重新设置了大小吗？
 
     // 取出关键帧的词袋特征向量
-    const DBoW2::FeatureVector &vFeatVecKF = pKF->mFeatVec;
+    const DBoW2::FeatureVector &vFeatVecKF = pKF->mFeatVec; // 特征向量是一个map，键是这帧图像的特征点归类的word在哪个node下，值是这个node下还有哪些特征点
 
     int nmatches=0;
 
@@ -275,13 +275,32 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
 
     while(KFit != KFend && Fit != Fend)
     {
+/**  node id 加速匹配的思想：
+ *  1.如果归类node id 所在的层级别太高，比如是最高的根节点，那么所有的特征点都属于这个根节点，那么在进行匹配的时候，相当于下面的KFit->first == Fit->first一定成立
+ *    因为只有这俩都是只有一个node id，都是根节点0。那么这个函数里面进行遍历的时候，要遍历关键帧的所有特征点，并且在当前帧中遍历所有特征点匹配，这样和暴力匹配相同。
+ *    这样就相当于这个程序中的两个for循环次数过多
+ * 
+ *  2.如果归类node id 所在层级太低，比如是最底层的叶子节点，那么每个特征点可能都被分到一个叶子节点中，这样虽然每个叶子节点中包含的特征点很少，但是叶子节点太多了，
+ *    这样导致虽然里面的for循环次数很少，但是外面的while循环遍历关键帧和当前帧中的node次数过多，而且如果是每个叶子节点都只有一个特征点的话，这样循环又和暴力匹配相同了。
+ * 
+ *  3.所以归类node id 所在的层级不能太低也不能太高，否则会导致两个极端，都等于暴力匹配。
+ *    这个层级越高，那么while分的node id越少，外层while循环越少，但是每个node包含的特征点越多，内层的两个for循环越多；
+ *    这个层级越低，那么while分的node id越多，外层while循环越多，但是每个node包含的特征点越少，内层的两个for循环越少。
+ * 
+ *  补充：好像不太对？如果把层级选的很低的话，那么匹配的时候就是使用最外层的while循环，而不用去匹配描述子了（假设每个描述子都别放入到不同的叶子节点中）
+ *   但是这样带来的结果是不是匹配完全依赖于词袋的分类了？
+ *   这样循环不需要计算描述子的距离，而是完全依靠词袋来进行分类。那这样和匹配描述子来进行分类有什么区别呢？结果会有很大的不同吗？
+ *   感觉这样匹配好像过于依赖聚类得到的词袋？而没有充分利用现在的描述子信息？
+ * 
+ */
+
         // Step 1：分别取出属于同一node的ORB特征点(只有属于同一node，才有可能是匹配点)
         // first 元素就是node id，遍历
         if(KFit->first == Fit->first) 
         {
             // second 是该node内存储的feature index
-            const vector<unsigned int> vIndicesKF = KFit->second;
-            const vector<unsigned int> vIndicesF = Fit->second;
+            const vector<unsigned int> vIndicesKF = KFit->second;  // 在参考关键帧KF中属于当前node id的所有特征点的索引
+            const vector<unsigned int> vIndicesF = Fit->second;    // 在当前帧F中属于当前node id的所有特征点的索引
 
             // Step 2：遍历KF中属于该node的特征点
             for(size_t iKF=0; iKF<vIndicesKF.size(); iKF++)
@@ -289,7 +308,7 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
                 // 关键帧该节点中特征点的索引
                 const unsigned int realIdxKF = vIndicesKF[iKF];
 
-                // 取出KF中该特征对应的地图点
+                // 取出KF中该特征点对应的地图点
                 MapPoint* pMP = vpMapPointsKF[realIdxKF]; 
 
                 if(!pMP)
@@ -341,7 +360,9 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
                     if(static_cast<float>(bestDist1)<mfNNratio*static_cast<float>(bestDist2))
                     {
                         // Step 4.3：记录成功匹配特征点的对应的地图点(来自关键帧)
-                        vpMapPointMatches[bestIdxF]=pMP;
+                        // pMP是关键帧中的当前特征点对应的地图点
+                        // bestIdxF是当前帧中和关键帧中的当期特征点最匹配的那个特征点，把这个特征点对应的地图点设置成关键帧中的当前特征点对应的地图点
+                        vpMapPointMatches[bestIdxF]=pMP;  
 
                         // 这里的realIdxKF是当前遍历到的关键帧的特征点id
                         const cv::KeyPoint &kp = pKF->mvKeysUn[realIdxKF];
@@ -368,17 +389,18 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
             KFit++;
             Fit++;
         }
+        // 因为在生成特征点的词袋向量的时候就对node id进行排序了，所以这里可以直接对序号相加
         else if(KFit->first < Fit->first)
         {
             // 对齐
-            KFit = vFeatVecKF.lower_bound(Fit->first);
+            KFit = vFeatVecKF.lower_bound(Fit->first);  // 找到>=Fit的node id的最小序号node
         }
         else
         {
             // 对齐
             Fit = F.mFeatVec.lower_bound(KFit->first);
         }
-    }
+    }  // 执行到这里的时候，对关键帧中的所有特征点，都得到了在当前帧中的一个匹配特征点
 
     // Step 5 根据方向剔除误匹配的点
     if(mbCheckOrientation)
@@ -400,6 +422,7 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
             // 剔除掉不在前三的匹配对，因为他们不符合“主流旋转方向”  
             for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
             {
+                // 擦除匹配关系这里就是把匹配的地图点去掉
                 vpMapPointMatches[rotHist[i][j]]=static_cast<MapPoint*>(NULL);
                 nmatches--;
             }
@@ -1723,7 +1746,7 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
     const cv::Mat Rcw = CurrentFrame.mTcw.rowRange(0,3).colRange(0,3);
     const cv::Mat tcw = CurrentFrame.mTcw.rowRange(0,3).col(3);
 
-    //当前相机坐标系到世界坐标系的平移向量
+    //当前相机坐标系在世界坐标系下的平移向量
     const cv::Mat twc = -Rcw.t()*tcw; 
 
     //上一帧的相机位姿
@@ -1731,10 +1754,10 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
     const cv::Mat tlw = LastFrame.mTcw.rowRange(0,3).col(3); // tlw(l)
 
     // vector from LastFrame to CurrentFrame expressed in LastFrame
-    // 当前帧相对于上一帧相机的平移向量
+    // 当前帧相对于上一帧相机的平移向量，主要就是为了计算相机实在前进还是后退
     const cv::Mat tlc = Rlw*twc+tlw; 
 
-    // 判断前进还是后退
+    // 判断前进还是后退。感觉这个判断前进后退的阈值比较玄学，为什么就选了基线距离？
     const bool bForward = tlc.at<float>(2) > CurrentFrame.mb && !bMono;     // 非单目情况，如果Z大于基线，则表示相机明显前进
     const bool bBackward = -tlc.at<float>(2) > CurrentFrame.mb && !bMono;   // 非单目情况，如果-Z小于基线，则表示相机明显后退
 
@@ -1743,25 +1766,26 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
     {
         MapPoint* pMP = LastFrame.mvpMapPoints[i];
 
-        if(pMP)
+        if(pMP)  // 如果上一帧的特征点对应有地图点
         {
-            if(!LastFrame.mvbOutlier[i])
+            if(!LastFrame.mvbOutlier[i]) // 并且这个地图点不是外点
             {
                 // 对上一帧有效的MapPoints投影到当前帧坐标系
-                cv::Mat x3Dw = pMP->GetWorldPos();
-                cv::Mat x3Dc = Rcw*x3Dw+tcw;
+                cv::Mat x3Dw = pMP->GetWorldPos();  // 地图点的世界坐标
+                cv::Mat x3Dc = Rcw*x3Dw+tcw;  // 把地图点转换到当前帧的坐标系下
 
                 const float xc = x3Dc.at<float>(0);
                 const float yc = x3Dc.at<float>(1);
                 const float invzc = 1.0/x3Dc.at<float>(2);
 
-                if(invzc<0)
+                if(invzc<0)   // 转换之后深度<0，说明这个地图点在当前帧坐标系下的相机成像平面后边，不合法
                     continue;
 
                 // 投影到当前帧中
                 float u = CurrentFrame.fx*xc*invzc+CurrentFrame.cx;
                 float v = CurrentFrame.fy*yc*invzc+CurrentFrame.cy;
 
+                // 投影之后像素坐标超过了图像范围
                 if(u<CurrentFrame.mnMinX || u>CurrentFrame.mnMaxX)
                     continue;
                 if(v<CurrentFrame.mnMinY || v>CurrentFrame.mnMaxY)
@@ -1772,6 +1796,7 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
 
                 // Search in a window. Size depends on scale
                 // 单目：th = 7，双目：th = 15
+                // 金字塔层级越高，那么搜索的原型区域半径就越小
                 float radius = th*CurrentFrame.mvScaleFactors[nLastOctave]; // 尺度越大，搜索范围越大
 
                 // 记录候选匹配点的id
@@ -1786,12 +1811,13 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                 else if(bBackward) // 后退,则上一帧兴趣点在所在的尺度0<=nCurOctave<=nLastOctave
                     vIndices2 = CurrentFrame.GetFeaturesInArea(u,v, radius, 0, nLastOctave);
                 else // 在[nLastOctave-1, nLastOctave+1]中搜索
+                // 在当前金字塔上下各一层，共三层的圆形区域内搜索，返回的就是特征点的索引
                     vIndices2 = CurrentFrame.GetFeaturesInArea(u,v, radius, nLastOctave-1, nLastOctave+1);
 
                 if(vIndices2.empty())
                     continue;
 
-                const cv::Mat dMP = pMP->GetDescriptor();
+                const cv::Mat dMP = pMP->GetDescriptor();   // 得到这个地图点对应的描述子
 
                 int bestDist = 256;
                 int bestIdx2 = -1;
@@ -1802,8 +1828,8 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                     const size_t i2 = *vit;
 
                     // 如果该特征点已经有对应的MapPoint了,则退出该次循环
-                    if(CurrentFrame.mvpMapPoints[i2])
-                        if(CurrentFrame.mvpMapPoints[i2]->Observations()>0)
+                    if(CurrentFrame.mvpMapPoints[i2])  // 这个特征点有地图点了
+                        if(CurrentFrame.mvpMapPoints[i2]->Observations()>0)  // 并且这个地图点被观测的次数>0
                             continue;
 
                     if(CurrentFrame.mvuRight[i2]>0)
@@ -1815,9 +1841,9 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                             continue;
                     }
 
-                    const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);
+                    const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);  // 得到这个特征点的索引
 
-                    const int dist = DescriptorDistance(dMP,d);
+                    const int dist = DescriptorDistance(dMP,d);  // 计算这个特征点的描述子和地图点的描述子之间的距离
 
                     if(dist<bestDist)
                     {
