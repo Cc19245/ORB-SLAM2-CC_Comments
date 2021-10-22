@@ -36,7 +36,7 @@
 	"hideFromTree": true
 	},
 	"?": {
-	"foreground": "yellow",
+	"foreground": "#FFA500",
 	"icon": "question",
 	"iconColour": "yellow",
 	"type": "text-and-comment"

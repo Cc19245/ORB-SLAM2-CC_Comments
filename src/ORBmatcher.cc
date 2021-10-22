@@ -959,10 +959,10 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
     while(f1it!=f1end && f2it!=f2end)
     {
         // 如果f1it和f2it属于同一个node节点才会进行匹配，这就是BoW加速匹配原理
-        if(f1it->first == f2it->first)
+        if(f1it->first == f2it->first)  // node相同
         {
             // Step 2.2：遍历属于同一node节点(id：f1it->first)下的所有特征点
-            for(size_t i1=0, iend1=f1it->second.size(); i1<iend1; i1++)
+            for(size_t i1=0, iend1=f1it->second.size(); i1<iend1; i1++) // 遍历这个node下KF1中的特征点
             {
                 // 获取pKF1中属于该node节点的所有特征点索引
                 const size_t idx1 = f1it->second[i1];
@@ -1025,7 +1025,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
 
                     //? 为什么双目就不需要判断像素点到极点的距离的判断？
                     // 因为双目模式下可以左右互匹配恢复三维点
-                    if(!bStereo1 && !bStereo2)
+                    if(!bStereo1 && !bStereo2)  //; 这两个关键帧中的特征点都不是双目。这么麻烦，直接判断传感器是不是双目不就行了？
                     {
                         const float distex = ex-kp2.pt.x;
                         const float distey = ey-kp2.pt.y;

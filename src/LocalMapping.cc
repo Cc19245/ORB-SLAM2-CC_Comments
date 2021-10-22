@@ -96,7 +96,8 @@ void LocalMapping::Run()
 
             // Triangulate new MapPoints
             // Step 4 当前关键帧与相邻关键帧通过三角化产生新的地图点，使得跟踪更稳
-            CreateNewMapPoints();
+            CreateNewMapPoints();  // 目前来看，是当前帧生成的地图点，到下一帧在生成地图点的时候再culling，那最后那一帧生成的地图点
+            // 不就不会执行culling了吗？只有下一次调用局部见图线程的时候才会执行啊
 
             // 已经处理完队列中的最后的一个关键帧
             if(!CheckNewKeyFrames())
@@ -114,6 +115,7 @@ void LocalMapping::Run()
             {
                 // Local BA
                 // Step 6 当局部地图中的关键帧大于2个的时候进行局部地图的BA
+                //; 局部地图关键帧个数不能太少
                 if(mpMap->KeyFramesInMap()>2)
                     // 注意这里的第二个参数是按地址传递的,当这里的 mbAbortBA 状态发生变化时，能够及时执行/停止BA
                     Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);
@@ -209,7 +211,7 @@ void LocalMapping::ProcessNewKeyFrame()
         {
             if(!pMP->isBad())
             {
-                if(!pMP->IsInKeyFrame(mpCurrentKeyFrame))
+                if(!pMP->IsInKeyFrame(mpCurrentKeyFrame))  // 如果这个地图点没有被新插入的这个关键帧观测到
                 {
                     // 如果地图点不是来自当前帧的观测（比如来自局部地图点），为当前地图点添加观测
                     pMP->AddObservation(mpCurrentKeyFrame, i);
@@ -270,7 +272,7 @@ void LocalMapping::MapPointCulling()
             // Step 2.2：跟踪到该地图点的帧数相比预计可观测到该地图点的帧数的比例小于25%，从地图中删除
             // (mnFound/mnVisible） < 25%
             // mnFound ：地图点被多少帧（包括普通帧）看到，次数越多越好
-            // mnVisible：地图点应该被看到的次数
+            // mnVisible：地图点应该被看到的次数  //; ???什么意思
             // (mnFound/mnVisible）：对于大FOV镜头这个比例会高，对于窄FOV镜头这个比例会低
             pMP->SetBadFlag();
             lit = mlpRecentAddedMapPoints.erase(lit);
@@ -339,6 +341,7 @@ void LocalMapping::CreateNewMapPoints()
     for(size_t i=0; i<vpNeighKFs.size(); i++)
     {
         // ! 疑似bug，正确应该是 if(i>0 && !CheckNewKeyFrames())
+        //; 确实，不知道这里在判断什么？i>0是什么条件？
         if(i>0 && CheckNewKeyFrames())
             return;
 
