@@ -1171,7 +1171,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
         // 如果Word 权重大于0，将其添加到BowVector 和 FeatureVector
         v.addWeight(id, w);   // BowVector类型，继承于std::map，里面的键值对分别是叶子节点的word id和对应的权重
         fv.addFeature(nid, i_feature);  // FeatureVector,继承于std::map，键是这个特征点对应的node id, 
-        //值是vector<int>，这个vector中存储的就是属于这个node id的所有特征点的索引
+        // 值是vector<int>，这个vector中存储的就是属于这个node id的所有特征点的索引
       }
     }
     

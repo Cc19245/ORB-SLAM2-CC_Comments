@@ -709,7 +709,7 @@ void Frame::ComputeBoW()
     // 判断是否以前已经计算过了，计算过了就跳过
     if(mBowVec.empty())
     {
-		// 将描述子mDescriptors转换为DBOW要求的输入格式
+		// 将描述子mDescriptors转换为DBOW要求的输入格式，就是把一个整个的矩阵变成向量插入到vector中
         vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
 		// 将特征点的描述子转换成词袋向量mBowVec以及特征向量mFeatVec
         mpORBvocabulary->transform(vCurrentDesc,	//当前的描述子vector

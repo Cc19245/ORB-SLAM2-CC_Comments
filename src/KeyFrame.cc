@@ -75,6 +75,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
 }
 
 // Bag of Words Representation 计算词袋表示
+//Done
 void KeyFrame::ComputeBoW()
 {
     // 只有当词袋向量或者节点和特征序号的特征向量为空的时候执行
@@ -84,7 +85,7 @@ void KeyFrame::ComputeBoW()
         vector<cv::Mat> vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
         // Feature vector associate features with nodes in the 4th level (from leaves up)
         // We assume the vocabulary tree has 6 levels, change the 4 otherwise  //?
-        mpORBvocabulary->transform(vCurrentDesc,mBowVec,mFeatVec,4);
+        mpORBvocabulary->transform(vCurrentDesc,mBowVec,mFeatVec,4);  
     }
 }
 
@@ -373,7 +374,7 @@ int KeyFrame::TrackedMapPoints(const int &minObs)
                 if(bCheckObs)
                 {
                     // 满足输入阈值要求的地图点计数加1
-                    if(mvpMapPoints[i]->Observations()>=minObs)
+                    if(mvpMapPoints[i]->Observations()>=minObs)  // Observations()是当前地图点被观测的次数
                         nPoints++;
                 }
                 else

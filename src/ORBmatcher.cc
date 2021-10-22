@@ -69,6 +69,7 @@ ORBmatcher::ORBmatcher(float nnratio, bool checkOri): mfNNratio(nnratio), mbChec
  * @param[in] th                        搜索范围
  * @return int                          成功匹配的数目
  */
+//Done
 int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoints, const float th)
 {
     int nmatches=0;
@@ -168,13 +169,15 @@ int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoint
         // 最佳匹配距离还需要满足在设定阈值内
         if(bestDist<=TH_HIGH)
         {
-            // 条件1：bestLevel==bestLevel2 表示 最佳和次佳在同一金字塔层级
+            // 条件1：bestLevel==bestLevel2 表示 最佳和次佳在同一金字塔层级。
+            // CC: 玄学，这是什么要求？
             // 条件2：bestDist>mfNNratio*bestDist2 表示最佳和次佳距离不满足阈值比例。理论来说 bestDist/bestDist2 越小越好
             if(bestLevel==bestLevel2 && bestDist>mfNNratio*bestDist2)
                 continue;
 
             //保存结果: 为Frame中的特征点增加对应的MapPoint
-            F.mvpMapPoints[bestIdx]=pMP; 
+            F.mvpMapPoints[bestIdx]=pMP;   // bestIdx来自index，就是从搜索函数中得到的，对应的就是图像中的特征点的索引。所以这里就赋值当前帧的地图点
+            // 匹配关系中，特征点索引为bestIdex，对应的地图点就是最佳匹配的局部地图点。
             nmatches++;
         }
     }
@@ -183,6 +186,7 @@ int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoint
 }
 
 // 根据观察的视角来计算匹配的时的搜索窗口大小
+//Done
 float ORBmatcher::RadiusByViewingCos(const float &viewCos)
 {
     // 当视角相差小于3.6°，对应cos(3.6°)=0.998，搜索范围是2.5，否则是4
@@ -244,6 +248,7 @@ bool ORBmatcher::CheckDistEpipolarLine(const cv::KeyPoint &kp1,const cv::KeyPoin
  * @param  vpMapPointMatches F中地图点对应的匹配，NULL表示未匹配
  * @return                   成功匹配的数量
  */
+//Done
 int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPointMatches)
 {
     // 获取该关键帧的地图点
@@ -592,6 +597,7 @@ int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapP
  * @param[in] windowSize                搜索窗口
  * @return int                          返回成功匹配的特征点数目
  */
+//Done
 int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f> &vbPrevMatched, vector<int> &vnMatches12, int windowSize)
 {
     int nmatches=0;
@@ -747,6 +753,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
  * @param  vpMatches12        pKF2中与pKF1匹配的MapPoint，vpMatches12[i]表示匹配的地图点，null表示没有匹配，i表示匹配的pKF1 特征点索引
  * @return                    成功匹配的数量
  */
+//Done
 int ORBmatcher::SearchByBoW(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches12)
 {
     // Step 1 分别取出两个关键帧的特征点、BoW 向量、地图点、描述子
@@ -1728,6 +1735,7 @@ int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &
  * @param[in] bMono                 是否为单目
  * @return int                      成功匹配的数量
  */
+//Done
 int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
 {
     int nmatches = 0;
@@ -1912,6 +1920,7 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
  * @param[in] ORBdist               匹配的ORB描述子距离应该小于这个阈值    
  * @return int                      成功匹配的数量
  */
+//Done
 int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set<MapPoint*> &sAlreadyFound, const float th , const int ORBdist)
 {
     int nmatches = 0;
@@ -2056,6 +2065,7 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set
  * @param[in & out] ind2          bin值第二大对应的索引
  * @param[in & out] ind3          bin值第三大对应的索引
  */
+//Done
 void ORBmatcher::ComputeThreeMaxima(vector<int>* histo, const int L, int &ind1, int &ind2, int &ind3)
 {
     int max1=0;
