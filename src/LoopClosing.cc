@@ -30,18 +30,12 @@
 */
 
 #include "LoopClosing.h"
-
 #include "Sim3Solver.h"
-
 #include "Converter.h"
-
 #include "Optimizer.h"
-
 #include "ORBmatcher.h"
-
 #include<mutex>
 #include<thread>
-
 
 namespace ORB_SLAM2
 {
@@ -79,7 +73,7 @@ void LoopClosing::Run()
         // Loopclosing中的关键帧是LocalMapping发送过来的，LocalMapping是Tracking中发过来的
         // 在LocalMapping中通过 InsertKeyFrame 将关键帧插入闭环检测队列mlpLoopKeyFrameQueue
         // Step 1 查看闭环检测队列mlpLoopKeyFrameQueue中有没有关键帧进来
-        if(CheckNewKeyFrames())
+        if(CheckNewKeyFrames())  //; 这个就是在局部建图线程中插入的
         {
             // Detect loop candidates and check covisibility consistency
             if(DetectLoop())
@@ -162,6 +156,7 @@ bool LoopClosing::DetectLoop()
     // Compute reference BoW similarity score
     // This is the lowest score to a connected keyframe in the covisibility graph
     // We will impose loop candidates to have a higher similarity than this
+    //; 什么连接关键帧？就是共视关键帧而已，这里乱起名字
     // Step 3：遍历当前回环关键帧所有连接（>15个共视地图点）关键帧，计算当前关键帧与每个共视关键的bow相似度得分，并得到最低得分minScore
     const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
     const DBoW2::BowVector &CurrentBowVec = mpCurrentKF->mBowVec;
@@ -181,7 +176,7 @@ bool LoopClosing::DetectLoop()
 
     // Query the database imposing the minimum score
     // Step 4：在所有关键帧中找出闭环候选帧（注意不和当前帧连接）
-    // minScore的作用：认为和当前关键帧具有回环关系的关键帧,不应该低于当前关键帧的相邻关键帧的最低的相似度minScore
+    // minScore的作用：认为和当前关键帧具有回环关系的关键帧,不应该低于当前关键帧的共视关键帧的最低的相似度minScore
     // 得到的这些关键帧,和当前关键帧具有较多的公共单词,并且相似度评分都挺高
     vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectLoopCandidates(mpCurrentKF, minScore);
 
