@@ -23,7 +23,7 @@
 	"type": "text-and-comment",  
 	},
 	"//;": {
-	"foreground": "#FFA500",
+	"foreground": "#DAA520",
 	"icon": "question",
 	"iconColour": "#FFA500",
 	"type": "text-and-comment",
@@ -118,6 +118,22 @@
 		"xstring": "cpp",
 		"xtr1common": "cpp",
 		"xutility": "cpp",
-		"*.tcc": "cpp"
+		"*.tcc": "cpp",
+		"clocale": "cpp",
+		"csignal": "cpp",
+		"cwctype": "cpp",
+		"array": "cpp",
+		"atomic": "cpp",
+		"strstream": "cpp",
+		"complex": "cpp",
+		"condition_variable": "cpp",
+		"any": "cpp",
+		"functional": "cpp",
+		"optional": "cpp",
+		"string_view": "cpp",
+		"cfenv": "cpp",
+		"cinttypes": "cpp",
+		"typeindex": "cpp",
+		"valarray": "cpp"
 	}
 }

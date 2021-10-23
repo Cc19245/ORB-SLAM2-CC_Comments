@@ -156,7 +156,7 @@ bool LoopClosing::DetectLoop()
     // Compute reference BoW similarity score
     // This is the lowest score to a connected keyframe in the covisibility graph
     // We will impose loop candidates to have a higher similarity than this
-    //; 什么连接关键帧？就是共视关键帧而已，这里乱起名字
+    //; 什么连接关键帧？就是共视关键帧而已
     // Step 3：遍历当前回环关键帧所有连接（>15个共视地图点）关键帧，计算当前关键帧与每个共视关键的bow相似度得分，并得到最低得分minScore
     const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
     const DBoW2::BowVector &CurrentBowVec = mpCurrentKF->mBowVec;
@@ -214,15 +214,15 @@ bool LoopClosing::DetectLoop()
     //              换而言之连续组mvConsistentGroups中只保存连续组链中末尾的组
 
     // 最终筛选后得到的闭环帧
-    mvpEnoughConsistentCandidates.clear();
+    // std::vector<KeyFrame*> mvpEnoughConsistentCandidates
+    mvpEnoughConsistentCandidates.clear();  // 有足够连续性的候选关键帧
 
-    // ConsistentGroup数据类型为pair<set<KeyFrame*>,int>
-    // ConsistentGroup.first对应每个“连续组”中的关键帧，ConsistentGroup.second为每个“连续组”的已连续几个的序号
-
-    vector<ConsistentGroup> vCurrentConsistentGroups;
+    // ConsistentGroup数据类型为pair<set<KeyFrame*>,int>  
+    // ConsistentGroup.first对应每个“连续组”中的子连续组，ConsistentGroup.second为每个“连续组”的已连续几个的序号
+    vector<ConsistentGroup> vCurrentConsistentGroups; // 当前连续组链
 
     // 这个下标是每个"子连续组"的下标,bool表示当前的候选组中是否有和该组相同的一个关键帧
-    vector<bool> vbConsistentGroup(mvConsistentGroups.size(),false);
+    vector<bool> vbConsistentGroup(mvConsistentGroups.size(),false);  // mvConsistentGroups是上一次的连续组链
 
     // Step 5.1：遍历刚才得到的每一个候选关键帧
     for(size_t i=0, iend=vpCandidateKFs.size(); i<iend; i++)
@@ -240,8 +240,8 @@ bool LoopClosing::DetectLoop()
         // Step 5.3：遍历前一次闭环检测到的连续组链
         // 上一次闭环的连续组链 std::vector<ConsistentGroup> mvConsistentGroups
         // 其中ConsistentGroup的定义：typedef pair<set<KeyFrame*>,int> ConsistentGroup
-        // 其中 ConsistentGroup.first对应每个“连续组”中的关键帧集合，ConsistentGroup.second为每个“连续组”的连续长度
-        for(size_t iG=0, iendG=mvConsistentGroups.size(); iG<iendG; iG++)
+        // 其中 ConsistentGroup.first对应每个“子连续组”中的关键帧集合，ConsistentGroup.second为每个“子连续组”的连续长度，
+        for(size_t iG=0, iendG=mvConsistentGroups.size(); iG<iendG; iG++)  // 遍历上一次的整个连续组链
         {
             // 取出之前的一个子连续组中的关键帧集合
             set<KeyFrame*> sPreviousGroup = mvConsistentGroups[iG].first;
@@ -249,9 +249,11 @@ bool LoopClosing::DetectLoop()
             // Step 5.4：遍历每个“子候选组”，检测子候选组中每一个关键帧在“子连续组”中是否存在
             // 如果有一帧共同存在于“子候选组”与之前的“子连续组”，那么“子候选组”与该“子连续组”连续
             bool bConsistent = false;
+            //; 遍历所有的子候选组中的关键帧
             for(set<KeyFrame*>::iterator sit=spCandidateGroup.begin(), send=spCandidateGroup.end(); sit!=send;sit++)
             {
-                if(sPreviousGroup.count(*sit))
+                //; 如果子候选组与子连续组中有相同的关键帧，那么认为子连续组和子候选组相连
+                if(sPreviousGroup.count(*sit)) 
                 {
                     // 如果存在，该“子候选组”与该“子连续组”相连
                     bConsistent=true;
@@ -259,7 +261,7 @@ bool LoopClosing::DetectLoop()
                     bConsistentForSomeGroup=true;
                     break;
                 }
-            }
+            } //; 跳出循环，说明子候选组和之前的当前子连续组有相连关系
 
             if(bConsistent)
             {
@@ -270,12 +272,12 @@ bool LoopClosing::DetectLoop()
                 int nCurrentConsistency = nPreviousConsistency + 1;
                 // 如果上述连续关系还未记录到 vCurrentConsistentGroups，那么记录一下
                 // 注意这里spCandidateGroup 可能放置在vbConsistentGroup中其他索引(iG)下
-                if(!vbConsistentGroup[iG])
+                if(!vbConsistentGroup[iG])  //; 如果上一次的这个子连续组还没有被标记与某个子候选组有连续关系
                 {
-                    // 将该“子候选组”的该关键帧打上连续编号加入到“当前连续组”
+                    // 将当前“子候选组”和连续的次数变成一对，加入到“当前连续组”
                     ConsistentGroup cg = make_pair(spCandidateGroup,nCurrentConsistency);
                     // 放入本次闭环检测的连续组vCurrentConsistentGroups里
-                    vCurrentConsistentGroups.push_back(cg);
+                    vCurrentConsistentGroups.push_back(cg);  // 当前连续组中可能存在相同的当前候选组，只是连续的次数不同
                     //this avoid to include the same group more than once
                     // 标记一下，防止重复添加到同一个索引iG
                     // 但是spCandidateGroup可能重复添加到不同的索引iG对应的vbConsistentGroup 中
@@ -297,7 +299,7 @@ bool LoopClosing::DetectLoop()
                     // 但spCandidateGroup 还可以和mvConsistentGroups 中其他的子连续组进行连接
                 }
             }
-        }
+        }  //; 遍历上一次的整个连续组链
 
         // If the group is not consistent with any previous group insert with consistency counter set to zero
         // Step 5.6：如果该“子候选组”的所有关键帧都和上次闭环无关（不连续），vCurrentConsistentGroups 没有新添加连续关系
@@ -307,7 +309,7 @@ bool LoopClosing::DetectLoop()
             ConsistentGroup cg = make_pair(spCandidateGroup,0);
             vCurrentConsistentGroups.push_back(cg);
         }
-    }// 遍历得到的初级的候选关键帧
+    }// 遍历得到的初级候选关键帧，每个候选关键帧和它的共视关键帧组成当前子候选组
 
     // Update Covisibility Consistent Groups
     // 更新连续组
@@ -399,6 +401,7 @@ bool LoopClosing::ComputeSim3()
         // Step 1.2 将当前帧 mpCurrentKF 与闭环候选关键帧pKF匹配
         // 通过bow加速得到 mpCurrentKF 与 pKF 之间的匹配特征点
         // vvpMapPointMatches 是匹配特征点对应的地图点,本质上来自于候选闭环帧
+        //; mpCurrentKF是当前关键帧，也就是闭环检测线程正在处理的关键帧
         int nmatches = matcher.SearchByBoW(mpCurrentKF,pKF,vvpMapPointMatches[i]);
 
         // 粗筛：匹配的特征点数太少，该候选帧剔除
@@ -416,7 +419,7 @@ bool LoopClosing::ComputeSim3()
 
             // Sim3Solver Ransac 过程置信度0.99，至少20个inliers 最多300次迭代
             pSolver->SetRansacParameters(0.99,20,300);
-            vpSim3Solvers[i] = pSolver;
+            vpSim3Solvers[i] = pSolver;  //; 注意这个写法，不是push_back，而是使用数组赋值的方式，也就是数组中有很多位置是没有元素的
         }
 
         // 保留的候选帧数量
@@ -435,7 +438,7 @@ bool LoopClosing::ComputeSim3()
             if(vbDiscarded[i])
                 continue;
 
-            KeyFrame* pKF = mvpEnoughConsistentCandidates[i];
+            KeyFrame* pKF = mvpEnoughConsistentCandidates[i]; //
 
             // 内点（Inliers）标志
             // 即标记经过RANSAC sim3 求解后,vvpMapPointMatches中的哪些作为内点
