@@ -256,7 +256,7 @@ bool LoopClosing::DetectLoop()
                     // 如果存在，该“子候选组”与该“子连续组”相连
                     bConsistent=true;
                     // 该“子候选组”至少与一个”子连续组“相连，跳出循环
-                    bConsistentForSomeGroup=true;
+                    bConsistentForSomeGroup = true;
                     break;
                 }
             }
