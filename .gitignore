@@ -25,4 +25,4 @@ doc/
 lib/
 */html/
 *.pdf
-
+.vscode/
