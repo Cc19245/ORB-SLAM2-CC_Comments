@@ -138,8 +138,11 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
 
     // Generate sets of 8 points for each RANSAC iteration
     // Step 2 在所有匹配特征点对中随机选择8对匹配特征点为一组，用于估计H矩阵和F矩阵
-    // 共选择 mMaxIterations (默认200) 组
+    // 共选择 mMaxIterations (默认200) 组   
+    //? 这样的话不就要保证初始化的时候至少有200*8 对特征点能够配对上吗？否则RANSAC找随机的点对找不到啊？
+    //; 自答：不是！因为迭代的200次选8对匹配点，其实每次迭代选择都是在整个的匹配关系中选择的
     //mvSets用于保存每次迭代时所使用的向量
+    //; mvSets最外层存储的是mMaxIterations个元素，每个元素初始化成了vector<size_t>(8,0)，也就是一个8维的向量，初始值都是0
     mvSets = vector< vector<size_t> >(mMaxIterations,		//最大的RANSAC迭代次数
 									  vector<size_t>(8,0));	//这个则是第二维元素的初始值，也就是第一维。这里其实也是一个第一维的构造函数，第一维vector有8项，每项的初始值为0.
 
@@ -150,7 +153,7 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     for(int it=0; it<mMaxIterations; it++)
     {
 		//迭代开始的时候，所有的点都是可用的
-        vAvailableIndices = vAllIndices;
+        vAvailableIndices = vAllIndices;   // 注意这个赋初始值的位置，也就是每次迭代选点的时候，所有的匹配关系都是可用的
 
         // Select a minimum set
 		//选择最小的数据样本集，使用八点法求，所以这里就循环了八次
@@ -242,7 +245,7 @@ void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, c
 {
     // Number of putative matches
 	//匹配的特征点对总数
-    const int N = mvMatches12.size();
+    const int N = mvMatches12.size();   // mvMatches12已经是处理之后的匹配关系，也就是其中存储的都是F1中在F2中有匹配关系的特征点的匹配关系，注意每个元素都是一个pair
 
     // Normalize coordinates
     // Step 1 将当前帧和参考帧中的特征点坐标进行归一化，主要是平移和尺度变换
@@ -255,7 +258,7 @@ void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, c
     vector<cv::Point2f> vPn1, vPn2;
 	// 记录各自的归一化矩阵
     cv::Mat T1, T2;
-    Normalize(mvKeys1,vPn1, T1);
+    Normalize(mvKeys1,vPn1, T1);   //; 感觉这里有问题：归一化应该是把有匹配关系的点归一化，而这里是把所有的特征点都归一化了，但是可能影响也不大
     Normalize(mvKeys2,vPn2, T2);
 
 	//这里求的逆在后面的代码中要用到，辅助进行原始尺度的恢复
@@ -293,7 +296,7 @@ void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, c
             // vPn1i和vPn2i为匹配的特征点对的归一化后的坐标
 			// 首先根据这个特征点对的索引信息分别找到两个特征点在各自图像特征点向量中的索引，然后读取其归一化之后的特征点坐标
             vPn1i[j] = vPn1[mvMatches12[idx].first];    //first存储在参考帧1中的特征点索引
-            vPn2i[j] = vPn2[mvMatches12[idx].second];   //second存储在参考帧1中的特征点索引
+            vPn2i[j] = vPn2[mvMatches12[idx].second];   //second存储在当前帧中匹配的特征点索引
         }//读取8对特征点的归一化之后的坐标
 
 		// Step 3 八点法计算单应矩阵
@@ -307,7 +310,7 @@ void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, c
         // 单应矩阵原理：X2=H21*X1，其中X1,X2 为归一化后的特征点    
         // 特征点归一化：vPn1 = T1 * mvKeys1, vPn2 = T2 * mvKeys2  得到:T2 * mvKeys2 =  Hn * T1 * mvKeys1   
         // 进一步得到:mvKeys2  = T2.inv * Hn * T1 * mvKeys1
-        H21i = T2inv*Hn*T1;
+        H21i = T2inv*Hn*T1;   //; 上面的解释很好了，因为上面计算的是坐标变换之后的H，所以这里还要换算成坐标变换之前的H
 		//然后计算逆
         H12i = H21i.inv();
 
@@ -630,7 +633,7 @@ float Initializer::CheckHomography(
     //   output: score, inliers
 
 	// 特点匹配个数
-    const int N = mvMatches12.size();
+    const int N = mvMatches12.size();  // mvMatches12是实际有效的匹配关系，里面的每个元素都是pair
 
 	// Step 1 获取从参考帧到当前帧的单应矩阵的各个元素
     const float h11 = H21.at<float>(0,0);
@@ -662,7 +665,7 @@ float Initializer::CheckHomography(
 
     // 基于卡方检验计算出的阈值（假设测量有一个像素的偏差）
 	// 自由度为2的卡方分布，显著性水平为0.05，对应的临界阈值
-    const float th = 5.991;
+    const float th = 5.991;   
 
     //信息矩阵，方差平方的倒数
     const float invSigmaSquare = 1.0/(sigma * sigma);
@@ -696,14 +699,14 @@ float Initializer::CheckHomography(
    
         // 计算重投影误差 = ||p1(i) - H12 * p2(i)||2
         const float squareDist1 = (u1 - u2in1) * (u1 - u2in1) + (v1 - v2in1) * (v1 - v2in1);
-        const float chiSquare1 = squareDist1 * invSigmaSquare;
+        const float chiSquare1 = squareDist1 * invSigmaSquare;   // 加上协方差的误差平方和
 
         // Step 2.3 用阈值标记离群点，内点的话累加得分
         if(chiSquare1>th)
             bIn = false;    
         else
             // 误差越大，得分越低
-            score += th - chiSquare1;
+            score += th - chiSquare1;       // th是卡方分布得到的数值，5.991
 
         // 计算从img1 到 img2 的投影变换误差
         // x1in2 = H21*x1
@@ -721,7 +724,8 @@ float Initializer::CheckHomography(
         const float chiSquare2 = squareDist2*invSigmaSquare;
  
         // 用阈值标记离群点，内点的话累加得分
-        if(chiSquare2>th)
+        //; 如果误差>5.991，说明落在了卡方检验的拒绝域，说明这是一个外点
+        if(chiSquare2>th)  
             bIn = false;
         else
             score += th - chiSquare2;   
@@ -732,7 +736,7 @@ float Initializer::CheckHomography(
         else
             vbMatchesInliers[i]=false;
     }
-    return score;
+    return score;       // 返回的得分只是内点才累加得分，外点由于误差太大，得分是一个负数，所以直接排除在外了
 }
 
 /**
@@ -966,12 +970,14 @@ bool Initializer::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv:
 
     // Step 4.3 确定最小的可以三角化的点数 
     // 在0.9倍的内点数 和 指定值minTriangulated =50 中取最大的，也就是说至少50个
-    int nMinGood = max(static_cast<int>(0.9*N), minTriangulated);
+    int nMinGood = max(static_cast<int>(0.9*N), minTriangulated);  //; 这里也是把用F恢复的那四条中的两条合并在这里写了
 
 	// 统计四组解中重建的有效3D点个数 > 0.7 * maxGood 的解的数目
     // 如果有多个解同时满足该条件，认为结果太接近，nsimilar++，nsimilar>1就认为有问题了，后面返回false
+    // 其实这里就是偷懒了，没有算good个数第二大的，然后让最大和第二大的比值>0.7。之类由于没有算第二大的个数，就直接对比最大的和其他所有的相比，
+    // 都要满足>0.7的比例。
     int nsimilar = 0;
-    if(nGood1>0.7*maxGood)
+    if(nGood1>0.7*maxGood)  
         nsimilar++;
     if(nGood2>0.7*maxGood)
         nsimilar++;
@@ -983,7 +989,7 @@ bool Initializer::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv:
     // Step 4.4 四个结果中如果没有明显的最优结果，或者没有足够数量的三角化点，则返回失败
     // 条件1: 如果四组解能够重建的最多3D点个数小于所要求的最少3D点个数（mMinGood），失败
     // 条件2: 如果存在两组及以上的解能三角化出 >0.7*maxGood的点，说明没有明显最优结果，失败
-    if(maxGood<nMinGood || nsimilar>1)	
+    if(maxGood<nMinGood || nsimilar>1)	 
     {
         return false;
     }
@@ -1349,7 +1355,8 @@ bool Initializer::ReconstructH(vector<bool> &vbMatchesInliers, cv::Mat &H21, cv:
 
     // Step 3 选择最优解。要满足下面的四个条件
     // 1. good点数最优解明显大于次优解，这里取0.75经验值
-    // 2. 视角差大于规定的阈值
+    // 2. 视角差大于规定的阈值？？？
+    //; 第2步中这个视角差输出的时候就没比较奇怪啊？这里的阈值又该怎么设置呢？
     // 3. good点数要大于规定的最小的被三角化的点数量
     // 4. good数要足够多，达到总数的90%以上
     if(secondBestGood<0.75*bestGood &&      
@@ -1428,7 +1435,7 @@ void Initializer::Triangulate(
 	//别忘了我们更习惯用列向量来表示一个点的空间坐标
     x3D = vt.row(3).t();
 	//为了符合其次坐标的形式，使最后一维为1
-    x3D = x3D.rowRange(0,3)/x3D.at<float>(3);
+    x3D = x3D.rowRange(0,3)/x3D.at<float>();3
 }
 
 
@@ -1586,11 +1593,11 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
     int nGood=0;
 
 	// 开始遍历所有的特征点对
-    for(size_t i=0, iend=vMatches12.size();i<iend;i++)
+    for(size_t i=0, iend=vMatches12.size();i<iend;i++)  // 匹配上的特征点对
     {
 
 		// 跳过outliers
-        if(!vbMatchesInliers[i])
+        if(!vbMatchesInliers[i])   // 在求F或者H的时候标记为外点的那些点
             continue;
 
         // Step 2 获取特征点对，调用Triangulate() 函数进行三角化，得到三角化测量之后的3D点坐标
@@ -1600,7 +1607,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
 		//存储三维点的的坐标
         cv::Mat p3dC1;
 
-        // 利用三角法恢复三维点p3dC1
+        // 利用三角法恢复三维点p3dC1，这里就是使用DLT的方法直接进行三角化，得到的结果不是非常准确
         Triangulate(kp1,kp2,	//特征点
 					P1,P2,		//投影矩阵
 					p3dC1);		//输出，三角化测量之后特征点的空间坐标		
@@ -1624,7 +1631,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
         float dist1 = cv::norm(normal1);
 
 		//同理构造向量PO2
-        cv::Mat normal2 = p3dC1 - O2;
+        cv::Mat normal2 = p3dC1 - O2;  // 注意这个向量也是在世界坐标系下表示的
 		//求模长
         float dist2 = cv::norm(normal2);
 
@@ -1636,7 +1643,10 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
         // ?视差比较小时，重投影误差比较大。这里0.99998 对应的角度为0.36°,这里不应该是 cosParallax>0.99998 吗？
         // ?因为后面判断vbGood 点时的条件也是 cosParallax<0.99998 
         // !可能导致初始化不稳定
-        if(p3dC1.at<float>(2)<=0 && cosParallax<0.99998)
+        if(p3dC1.at<float>(2)<=0 && cosParallax<0.99998)   // 深度值为负，为什么是&&？不应该是||吗？
+        //; 注意这里就是&&，原因原作者的注释已经说了，因为无限远的点很容易得到一个负深度，所以这里只判断具有足够的视差的点并且深度还是负数的时候，才是非法的点。
+        //; 很容易直到，当一个点是无限远的时候，对于两个相机来说，他们的视差肯定很小（因为此时点到两个相机的向量几乎是平行的了），所以视差比较大就限定了3D点的
+        //; 深度不是特别特别大
             continue;
 
         // Check depth in front of second camera (only if enough parallax, as "infinite" points can easily go to negative depth)
@@ -1689,7 +1699,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
 
 		//判断视差角，只有视差角稍稍大一丢丢的才会给打good点标记
 		//? bug 我觉得这个写的位置不太对。你的good点计数都++了然后才判断，不是会让good点标志和good点计数不一样吗
-        if(cosParallax<0.99998)
+        if(cosParallax<0.99998)   // 这个点的视差足够大。不过这么看也不是很大啊？
             vbGood[vMatches12[i].first]=true;
     }
 

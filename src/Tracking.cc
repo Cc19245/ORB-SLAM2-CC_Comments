@@ -63,7 +63,7 @@ using namespace std;
 namespace ORB_SLAM2
 {
 
-///构造函数
+///构造函数   这个构造函数在system的构造函数中被调用，在system的构造函数中会生成一个tracking对象    
 Tracking::Tracking(
     System *pSys,                       //系统实例
     ORBVocabulary* pVoc,                //BOW字典
@@ -120,7 +120,7 @@ Tracking::Tracking(
         DistCoef.resize(5);
         DistCoef.at<float>(4) = k3;
     }
-    DistCoef.copyTo(mDistCoef);
+    DistCoef.copyTo(mDistCoef);   // distortion coefficient  畸变系数
 
     // 双目摄像头baseline * fx 50
     mbf = fSettings["Camera.bf"];
@@ -232,12 +232,12 @@ void Tracking::SetViewer(Viewer *pViewer)
     mpViewer=pViewer;
 }
 
+
+
 // 输入左右目图像，可以为RGB、BGR、RGBA、GRAY
 // 1、将图像转为mImGray和imGrayRight并初始化mCurrentFrame
 // 2、进行tracking过程
 // 输出世界坐标系到该帧相机坐标系的变换矩阵
-
-
 cv::Mat Tracking::GrabImageStereo(
     const cv::Mat &imRectLeft,      //左侧图像
     const cv::Mat &imRectRight,     //右侧图像
@@ -294,6 +294,7 @@ cv::Mat Tracking::GrabImageStereo(
     //返回位姿
     return mCurrentFrame.mTcw.clone();
 }
+
 
 // 输入左目RGB或RGBA图像和深度图
 // 1、将图像转为mImGray和imDepth并初始化mCurrentFrame
@@ -366,7 +367,7 @@ cv::Mat Tracking::GrabImageRGBD(
  * Step 2 ：构造Frame
  * Step 3 ：跟踪
  */
-cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im,const double &timestamp)
+cv::Mat Tracking::relocalisationGrabImageMonocular(const cv::Mat &im,const double &timestamp)
 {
     mImGray = im;
 
@@ -387,10 +388,10 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im,const double &timestamp)
             cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
     }
 
-    // Step 2 ：构造Frame
+    // Step 2 ：构造Frame，其中最重要的就是建立图像金字塔，提取FAST角点，并且计算对应的ORB描述子
     //判断该帧是不是初始化
     if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET) //没有成功初始化的前一个状态就是NO_IMAGES_YET
-        mCurrentFrame = Frame(
+        mCurrentFrame = Frame(   
             mImGray,
             timestamp,
             mpIniORBextractor,      //初始化ORB特征点提取器会提取2倍的指定特征点数目
@@ -414,12 +415,14 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im,const double &timestamp)
     Track();
 
     //返回当前帧的位姿
-    return mCurrentFrame.mTcw.clone();
+    return mCurrentFrame.mTcw.clone();      // 注意这里为什么要返回一个clone?
 }
 
+
+//; 这个函数是Tracking的主函数，非常重要！
 /*
  * @brief Main tracking function. It is independent of the input sensor.
- *
+ *    
  * track包含两部分：估计运动、跟踪局部地图
  * 
  * Step 1：初始化
@@ -428,7 +431,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im,const double &timestamp)
  */
 void Tracking::Track()
 {
-    // track包含两部分：估计运动、跟踪局部地图
+    // track包含两部分：估计运动、跟踪局部地图 
     
     // mState为tracking的状态，包括 SYSTME_NOT_READY, NO_IMAGE_YET, NOT_INITIALIZED, OK, LOST
     // 如果图像复位过、或者第一次运行，则为NO_IMAGE_YET状态
@@ -883,7 +886,7 @@ void Tracking::MonocularInitialization()
             mInitialFrame = Frame(mCurrentFrame);
             // 用当前帧更新上一帧
             mLastFrame = Frame(mCurrentFrame);
-            // mvbPrevMatched  记录"上一帧"所有特征点
+            // mvbPrevMatched  记录"上一帧"所有特征点的坐标pt
             mvbPrevMatched.resize(mCurrentFrame.mvKeysUn.size());
             for(size_t i=0; i<mCurrentFrame.mvKeysUn.size(); i++)
                 mvbPrevMatched[i]=mCurrentFrame.mvKeysUn[i].pt;
@@ -927,8 +930,8 @@ void Tracking::MonocularInitialization()
         // mvIniMatches 保存参考帧F1中特征点是否匹配上，index保存是F1对应特征点索引，值保存的是匹配好的F2特征点索引
         int nmatches = matcher.SearchForInitialization(
             mInitialFrame,mCurrentFrame,    //初始化时的参考帧和当前帧
-            mvbPrevMatched,                 //在初始化参考帧中提取得到的特征点
-            mvIniMatches,                   //保存匹配关系, 这里存储的是1中的特征点对应在2中的特征点的索引
+            mvbPrevMatched,                 //在初始化参考帧中提取得到的特征点的坐标
+            mvIniMatches,                   //保存匹配关系, 这里存储的是1中的特征点对应在2中的特征点的索引，如果是-1那么说明没有匹配
             100);                           //搜索窗口大小
 
         // Check if there are enough correspondences
@@ -973,12 +976,14 @@ void Tracking::MonocularInitialization()
 
             // Step 8 创建初始化地图点MapPoints
             // Initialize函数会得到mvIniP3D，
-            // mvIniP3D是cv::Point3f类型的一个容器，是个存放3D点的临时变量，
+            // mvIniP3D是cv::Point3f类型的一个容器，是个存放3D点的临时变量，只有坐标信息而没有其他任何信息，不满足地图点的特性
             // CreateInitialMapMonocular将3D点包装成MapPoint类型存入KeyFrame和Map中
             CreateInitialMapMonocular();
         }//当初始化成功的时候进行
     }//如果单目初始化器已经被创建
 }
+
+
 
 /**
  * @brief 单目相机成功初始化后用三角化得到的点生成MapPoints
@@ -987,7 +992,8 @@ void Tracking::MonocularInitialization()
 void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames 认为单目初始化时候的参考帧和当前帧都是关键帧
-    // 注意mpMap是一个全局地图句柄，表明这个关键之是属于某个全局地图的？
+    // 注意mpMap是一个全局地图句柄，表明这个关键帧是属于某个全局地图的？
+    //; mpKeyFrameDB是加载的离线词袋的字典，使用这个字典才能计算一张图片对应的词袋向量
     KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB);  // 第一帧
     KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);  // 第二帧
 
@@ -996,7 +1002,7 @@ void Tracking::CreateInitialMapMonocular()
     pKFcur->ComputeBoW();
 
     // Insert KFs in the map
-    // Step 2 将关键帧插入到地图
+    // Step 2 将关键帧插入到地图（地图包括地图点和关键帧）
     mpMap->AddKeyFrame(pKFini);
     mpMap->AddKeyFrame(pKFcur);
 
@@ -1007,7 +1013,7 @@ void Tracking::CreateInitialMapMonocular()
     for(size_t i=0; i<mvIniMatches.size();i++)
     {
         // 没有匹配，跳过
-        if(mvIniMatches[i]<0)
+        if(mvIniMatches[i]<0)  //; 注意这里在三角化地图点之后，对于三角化不成功的，后来已经手动删除了特征点的匹配关系，所以这里只要是有匹配关系的，都是有对应的3D点的
             continue;
 
         //Create MapPoint.
@@ -1017,8 +1023,8 @@ void Tracking::CreateInitialMapMonocular()
         // Step 3.1 用3D点构造MapPoint
         MapPoint* pMP = new MapPoint(
             worldPos,     // 地图点的世界坐标
-            pKFcur,       // 生成该地图点的关键帧
-            mpMap);
+            pKFcur,       // 生成该地图点的关键帧，这个关键帧也作为这个地图点的参考关键帧
+            mpMap);       // 地图点所在的地图
 
         // Step 3.2 为该MapPoint添加属性：
         // a.观测到该MapPoint的关键帧
@@ -1026,23 +1032,26 @@ void Tracking::CreateInitialMapMonocular()
         // c.该MapPoint的平均观测方向和深度范围
 
         // 表示该KeyFrame的2D特征点和对应的3D地图点
-        pKFini->AddMapPoint(pMP,i);  // i是特征点索引
-        pKFcur->AddMapPoint(pMP,mvIniMatches[i]);
+        //; 向关键帧中添加这个地图点，
+        pKFini->AddMapPoint(pMP,i);  //; i是这个地图点对应于第一个关键帧中的特征点的索引
+        pKFcur->AddMapPoint(pMP,mvIniMatches[i]);   //; mvIniMatches[i]是这个地图点对应于第二个关键帧中的特征点的索引
 
         // a.表示该MapPoint可以被哪个KeyFrame的哪个特征点观测到
-        pMP->AddObservation(pKFini,i);
+        //; 注意这一步是建立公式关系的重要的一步
+        pMP->AddObservation(pKFini,i);   //; 添加地图点的观测，里面的数据类型是map，表明这个地图点可以被哪个关键帧观测到，对应在这个关键帧中的特征点索引是多少
         pMP->AddObservation(pKFcur,mvIniMatches[i]);
 
         // b.从众多观测到该MapPoint的特征点中挑选最有代表性的描述子
         pMP->ComputeDistinctiveDescriptors();
+
         // c.更新该MapPoint平均观测方向以及观测距离的范围
         pMP->UpdateNormalAndDepth();
 
         //Fill Current Frame structure
         //mvIniMatches下标i表示在初始化参考帧中的特征点的序号
         //mvIniMatches[i]是初始化当前帧中的特征点的序号
-        mCurrentFrame.mvpMapPoints[mvIniMatches[i]] = pMP;  // 设置当前帧（注意不是关键帧）中特征点对应的关键帧
-        mCurrentFrame.mvbOutlier[mvIniMatches[i]] = false;
+        mCurrentFrame.mvpMapPoints[mvIniMatches[i]] = pMP;  // 设置当前帧（注意不是关键帧）中特征点对应的地图点
+        mCurrentFrame.mvbOutlier[mvIniMatches[i]] = false;  // 当前帧的特征点有匹配关系，那么他就不是外点
 
         //Add to Map
         mpMap->AddMapPoint(pMP);
@@ -1050,7 +1059,7 @@ void Tracking::CreateInitialMapMonocular()
 
     // Update Connections
     // Step 3.3 更新关键帧间的连接关系
-    // 在3D点和关键帧之间建立边，每个边有一个权重，边的权重是该关键帧与当前帧公共3D点的个数
+    // 在关键帧和关键帧之间建立边，每个边有一个权重，边的权重是该关键帧与其他所有的关键帧观测到的共同的地图点的个数
     pKFini->UpdateConnections();
     pKFcur->UpdateConnections();
 
@@ -1058,11 +1067,14 @@ void Tracking::CreateInitialMapMonocular()
     cout << "New Map created with " << mpMap->MapPointsInMap() << " points" << endl;
 
     // Step 4 全局BA优化，同时优化所有位姿和三维点
+    //; 注意看传入的变量，是地图，也就是说优化的时候直接优化地图就可以，因为地图中就包括关键帧和地图点，这就包括了BA优化中的所有变量
     Optimizer::GlobalBundleAdjustemnt(mpMap,20);
 
     // Set median depth to 1
     // Step 5 取场景的中值深度，用于尺度归一化 
     // 为什么是 pKFini 而不是 pKCur ? 答：都可以的，内部做了位姿变换了
+    //; CC：还是不太一样把，因为这两帧看到的地图点是不一样的
+    //; CC: 有考虑了一下是一样的，因为现在是创建初始地图，这个初始地图就是由初始帧和当前帧三角化得到的，所以这两帧对应的地图是一样的
     float medianDepth = pKFini->ComputeSceneMedianDepth(2);
     float invMedianDepth = 1.0f/medianDepth;
     
@@ -1072,12 +1084,14 @@ void Tracking::CreateInitialMapMonocular()
         cout << "Wrong initialization, reseting..." << endl;
         Reset();
         return;
-    
+    }
 
     // Step 6 将两帧之间的变换归一化到平均深度1的尺度下
+    //; 为什么要进行这样的尺度归一化呢？或者说原来算出来的t是在什么尺度下的？
     // Scale initial baseline
     cv::Mat Tc2w = pKFcur->GetPose();
     // x/z y/z 将z归一化到1 
+    //; 注意这里只是归一化了平移向量t，因为只有平移是有尺度的，而旋转是绝对的
     Tc2w.col(3).rowRange(0,3) = Tc2w.col(3).rowRange(0,3)*invMedianDepth;
     pKFcur->SetPose(Tc2w);
 
@@ -1087,12 +1101,16 @@ void Tracking::CreateInitialMapMonocular()
     vector<MapPoint*> vpAllMapPoints = pKFini->GetMapPointMatches();
     for(size_t iMP=0; iMP<vpAllMapPoints.size(); iMP++)
     {
-        if(vpAllMapPoints[iMP])
+        if(vpAllMapPoints[iMP])    // 如果当前帧的这个地图点不是空，说明这个特征点的位置有对应的地图点
         {
             MapPoint* pMP = vpAllMapPoints[iMP];
-            pMP->SetWorldPos(pMP->GetWorldPos()*invMedianDepth);
+            pMP->SetWorldPos(pMP->GetWorldPos()*invMedianDepth);     // 那这里只是把初始帧对应的地图点进行了归一化？
+            //; 其实是没有问题的，因为根据前面单目生成地图点可以知道，地图点是初始帧和当前帧一起三角化算出来的，所以这两帧对应的地图点是完全一样的
         }
     }
+
+    //; 注意Step 6 和 7进行尺度归一化，把平移和地图都乘了同一个尺度因子，这样是可行的，只不过这个尺度因子选的是初始地图的深度中值
+
 
     //  Step 8 将关键帧插入局部地图，更新归一化后的位姿、局部地图点
     mpLocalMapper->InsertKeyFrame(pKFini);

@@ -601,7 +601,7 @@ int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapP
 int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f> &vbPrevMatched, vector<int> &vnMatches12, int windowSize)
 {
     int nmatches=0;
-    // F1中特征点和F2中匹配关系，注意是按照F1特征点数目分配空间
+    // F1中特征点和F2中匹配关系，注意是按照F1特征点数目分配空间，因为是找F1中的特征点在F2中的对应匹配点
     vnMatches12 = vector<int>(F1.mvKeysUn.size(),-1);
 
     // Step 1 构建旋转直方图，HISTO_LENGTH = 30
@@ -627,7 +627,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
         if(level1>0)
             continue;
 
-        // Step 2 在半径窗口内搜索当前帧F2中所有的候选匹配特征点 
+        // Step 2 在半径窗口内搜索当前帧F2中所有的候选匹配特征点(实际进去看这个函数的话，并不是在一个圆形窗口内，而是在一个正方形窗口内)
         // vbPrevMatched 输入的是参考帧 F1的特征点
         // windowSize = 100，输入最大最小金字塔层级 均为0
         vector<size_t> vIndices2 = F2.GetFeaturesInArea(vbPrevMatched[i1].x,vbPrevMatched[i1].y, windowSize,level1,level1);
@@ -661,6 +661,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
                 bestDist=dist;
                 bestIdx2=i2;
             }
+            // 更新次佳距离
             else if(dist<bestDist2)
             {
                 bestDist2=dist;
@@ -669,8 +670,8 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
 
         // Step 4 对最优次优结果进行检查，满足阈值、最优/次优比例，删除重复匹配
         // 即使算出了最佳描述子匹配距离，也不一定保证配对成功。要小于设定阈值
-        if(bestDist<=TH_LOW)
-        {
+        if(bestDist<=TH_LOW)   // 最佳的距离要<50的阈值
+        { 
             // 最佳距离比次佳距离要小于设定的比例，这样特征点辨识度更高
             if(bestDist<(float)bestDist2*mfNNratio)
             {
@@ -726,7 +727,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
                 int idx1 = rotHist[i][j];  // 选出这个直方图中的一个匹配关系的索引
                 if(vnMatches12[idx1]>=0)   // 如果这个有匹配关系
                 {
-                    vnMatches12[idx1]=-1;
+                    vnMatches12[idx1]=-1;   // 注意这里只删除F1中的特征匹配索引即可，因为前面定义的F2中的特征匹配索引只是为了防止和F1中的特征点重复匹配
                     nmatches--;
                 }
             }

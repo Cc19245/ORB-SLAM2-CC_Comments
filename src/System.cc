@@ -92,7 +92,7 @@ System::System(const string &strVocFile,					//词典文件路径
     mpKeyFrameDatabase = new KeyFrameDatabase(*mpVocabulary);
 
     //Create the Map
-    mpMap = new Map();
+    mpMap = new Map();    // 这个时候就是一个空地图
 
     //Create Drawers. These are used by the Viewer
     //这里的帧绘制器和地图绘制器将会被可视化的Viewer所使用
@@ -107,7 +107,7 @@ System::System(const string &strVocFile,					//词典文件路径
     						 mpFrameDrawer, 			//帧绘制器
     						 mpMapDrawer,				//地图绘制器
                              mpMap, 					//地图
-                             mpKeyFrameDatabase, 		//关键帧地图
+                             mpKeyFrameDatabase, 		//关键帧数据库，就是由词袋生成的
                              strSettingsFile, 			//设置文件路径
                              mSensor);					//传感器类型iomanip
 

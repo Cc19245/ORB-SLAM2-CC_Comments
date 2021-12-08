@@ -541,7 +541,7 @@ ORBextractor::ORBextractor(int _nfeatures,		//指定要提取的特征点数目
     // pre-compute the end of a row in a circular patch
 	//预先计算圆形patch中行的结束位置
 	//+1中的1表示那个圆的中间行
-    umax.resize(HALF_PATCH_SIZE + 1);
+    umax.resize(HALF_PATCH_SIZE + 1);   // 注意umax一个成员变量，这里命名不太规范了
 	
 	//cvFloor返回不大于参数的最大整数值，cvCeil返回不小于参数的最小整数值，cvRound则是四舍五入
     int v,		//循环辅助变量
@@ -674,6 +674,7 @@ void ExtractorNode::DivideNode(ExtractorNode &n1,
     if(n4.vKeys.size()==1)
         n4.bNoMore = true;
 }
+
 
 /**
  * @brief 使用四叉树法对一个图像金字塔图层中的特征点进行平均和分发
@@ -1056,8 +1057,7 @@ vector<cv::KeyPoint> ORBextractor::DistributeOctTree(const vector<cv::KeyPoint>&
 
 //计算四叉树的特征点，函数名字后面的OctTree只是说明了在过滤和分配特征点时所使用的方式
 void ORBextractor::ComputeKeyPointsOctTree(
-	vector<vector<KeyPoint> >& allKeypoints)	//所有的特征点，这里第一层vector存储的是某图层里面的所有特征点，
-												//第二层存储的是整个图像金字塔中的所有图层里面的所有特征点
+	vector<vector<KeyPoint> >& allKeypoints)	//所有的特征点，这里第一层vector存储的是某图层里面的所有特征点，第二层存储的是整个图像金字塔中的所有图层里面的所有特征点										
 {
 	//重新调整图像层数
     allKeypoints.resize(nlevels);
@@ -1573,7 +1573,7 @@ void ORBextractor::operator()( InputArray _image, InputArray _mask, vector<KeyPo
 	// 存储所有的特征点，注意此处为二维的vector，第一维存储的是金字塔的层数，第二维存储的是那一层金字塔图像里提取的所有特征点
     vector < vector<KeyPoint> > allKeypoints; 
     //使用四叉树的方式计算每层图像的特征点并进行分配
-    ComputeKeyPointsOctTree(allKeypoints);
+    ComputeKeyPointsOctTree(allKeypoints);   // OctTree是八叉树？October八月？
 
 	//使用传统的方法提取并平均分配图像的特征点，作者并未使用
     //ComputeKeyPointsOld(allKeypoints);

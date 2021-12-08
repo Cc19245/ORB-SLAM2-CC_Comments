@@ -104,7 +104,7 @@ int main(int argc, char **argv)
         }
 
         // step 4.3 开始计时
-#ifdef COMPILEDWITHC11
+#ifdef COMPILEDWITHC11   // 如果使用C11编译
         std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 #else
         std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
@@ -131,11 +131,11 @@ int main(int argc, char **argv)
         // 按照时间戳被送入到SLAM系统中进行跟踪
         double T=0;
         if(ni<nImages-1)
-            T = vTimestamps[ni+1]-tframe;
+            T = vTimestamps[ni+1]-tframe;  // 下一帧时间戳 - 当前帧时间戳
         else if(ni>0)
             T = tframe-vTimestamps[ni-1];
 
-        if(ttrack<T)
+        if(ttrack<T)    // 当前帧追踪花的时间 < 视频中距离下一帧的时间，那么就等待
             usleep((T-ttrack)*1e6);
     }
 

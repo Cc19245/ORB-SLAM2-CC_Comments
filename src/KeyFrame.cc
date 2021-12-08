@@ -430,7 +430,7 @@ void KeyFrame::UpdateConnections()
     {
         MapPoint* pMP = *vit;
 
-        if(!pMP)  // 地图点为空？什么意思
+        if(!pMP)  // 地图点为空，说明当前关键帧的这个位置的特征点没有对应的地图点
             continue;
 
         if(pMP->isBad())  // 地图点是坏点，即将被删除
@@ -520,8 +520,6 @@ void KeyFrame::UpdateConnections()
         // mspConnectedKeyFrames = spConnectedKeyFrames;
         // 更新当前帧与其它关键帧的连接权重
         // 注意这里才更新当前帧和其他帧的连接关系！
-        // CC：问题：这里是把所有的共识关系都加进去了啊，因为KFcounter中包含阈值<15的共视关系，这里不是全加进去了吗？
-        // 而添加其他帧的共视关系的时候，只是增加了权重>15的共视关系，这样二者不就不对等了吗？
         mConnectedKeyFrameWeights = KFcounter;
         mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
         mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
@@ -887,9 +885,9 @@ float KeyFrame::ComputeSceneMedianDepth(const int q)
 
     vector<float> vDepths;
     vDepths.reserve(N);
-    cv::Mat Rcw2 = Tcw_.row(2).colRange(0,3);
+    cv::Mat Rcw2 = Tcw_.row(2).colRange(0,3);  // 因为这里只要算z深度，所以取旋转矩阵的第3行（索引是2）即可
     Rcw2 = Rcw2.t();
-    float zcw = Tcw_.at<float>(2,3);
+    float zcw = Tcw_.at<float>(2,3);  // 只取z坐标的值
     // 遍历每一个地图点,计算并保存其在当前关键帧下的深度
     for(int i=0; i<N; i++)
     {

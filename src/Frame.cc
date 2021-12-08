@@ -372,7 +372,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
 		// 表示一个图像像素相当于多少个图像网格行（高）
         mfGridElementHeightInv=static_cast<float>(FRAME_GRID_ROWS)/static_cast<float>(mnMaxY-mnMinY);
 
-		//给类的静态成员变量复制
+		//给类的静态成员变量复制，因为是静态成员变量，所以只赋值一次即可
         fx = K.at<float>(0,0);
         fy = K.at<float>(1,1);
         cx = K.at<float>(0,2);
@@ -663,6 +663,7 @@ vector<size_t> Frame::GetFeaturesInArea(const float &x, const float  &y, const f
                 // CC：为什么这里要求距离这么严格？实际上一个网格最多10个像素，这里要求特征点必须在网格的r范围之内，
                 // 意义很大吗?
 				// 如果x方向和y方向的距离都在指定的半径之内，存储其index为候选特征点
+                //; 其实如果按照这里的写法来看，并不是在半径r的圆形区域内找特征点，而是在边长为2r的正方形内找特征点
                 if(fabs(distx)<r && fabs(disty)<r)
                     vIndices.push_back(vCell[j]);
             }

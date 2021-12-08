@@ -157,7 +157,7 @@ void MapPoint::AddObservation(KeyFrame* pKF, size_t idx)
     if(mObservations.count(pKF)) 
         return;
     // 如果没有添加过观测，记录下能观测到该MapPoint的KF和该MapPoint在KF中的索引
-    mObservations[pKF]=idx;
+    mObservations[pKF]=idx;   //; 注意这是一个map, 是用关键帧作为索引
 
     if(pKF->mvuRight[idx]>=0)
         nObs+=2; // 双目或者rgbd
@@ -524,7 +524,7 @@ void MapPoint::UpdateNormalAndDepth()
         n++;
     } 
 
-    // 这个计算的是地图点在参考关键帧下的位置，对应的dist也是地图点在参考关键帧下的距离
+    // 这个计算的是地图点在参考关键帧下的位置，对应的dist就是地图点离参考关键帧的距离（注意地图点的参考关键帧就是生成它的那个关键帧）
     cv::Mat PC = Pos - pRefKF->GetCameraCenter();                           // 参考关键帧相机指向地图点的向量（在世界坐标系下的表示）
     const float dist = cv::norm(PC);                                        // 该点到参考关键帧相机的距离
     const int level = pRefKF->mvKeysUn[observations[pRefKF]].octave;        // 观测到该地图点的当前帧的特征点在金字塔的第几层

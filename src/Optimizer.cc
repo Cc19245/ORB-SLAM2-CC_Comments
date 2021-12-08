@@ -185,7 +185,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
             // 取出该地图点对应该关键帧的2D特征点
             const cv::KeyPoint &kpUn = pKF->mvKeysUn[mit->second];
 
-            if(pKF->mvuRight[mit->second]<0)
+            if(pKF->mvuRight[mit->second]<0)   // 右图对应的特征点值为-1，说明是单目
             {
                 // 以下是单目相机模式：
                 // 构造观测
