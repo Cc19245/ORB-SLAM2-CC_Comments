@@ -233,7 +233,8 @@ public:
     const long int mnFirstFrame; ///< 创建该MapPoint的帧ID（即每一关键帧有一个帧ID）
 
     // 被观测到的相机数目，单目+1，双目或RGB-D则+2
-    int nObs;
+    //; 地图点被观测到的次数，用这个可以来衡量这个地图点是否被连续跟踪到，比如这个地图点被三帧跟踪到了，那么就说明这个地图点被跟踪了（因为只有连续看到才是跟踪）
+    int nObs;  
 
     // Variables used by the tracking
     float mTrackProjX;             ///< 当前地图点投影到某帧上后的坐标

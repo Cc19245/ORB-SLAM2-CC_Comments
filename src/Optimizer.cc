@@ -387,7 +387,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     optimizer.addVertex(vSE3);
 
     // Set MapPoint vertices
-    const int N = pFrame->N;
+    const int N = pFrame->N;   //; N 是2D特征点个数，但是特征点不一定有对应的地图点
 
     // for Monocular
     vector<g2o::EdgeSE3ProjectXYZOnlyPose*> vpEdgesMono;
@@ -416,7 +416,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     {
         MapPoint* pMP = pFrame->mvpMapPoints[i];
         // 如果这个地图点还存在没有被剔除掉
-        if(pMP)
+        if(pMP)   //; 这个2D特征点对应有匹配的3D地图点
         {
             // Monocular observation
             // 单目情况
@@ -539,7 +539,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
             // 如果这条误差边是来自于outlier
             if(pFrame->mvbOutlier[idx])
             {
-                e->computeError(); 
+                e->computeError();    //; 为什么要手动调用一下计算误差？
             }
 
             // 就是error*\Omega*error,表征了这个点的误差大小(考虑置信度以后)
@@ -561,6 +561,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                 e->setRobustKernel(0); // 除了前两次优化需要RobustKernel以外, 其余的优化都不需要 -- 因为重投影的误差已经有明显的下降了
         } // 对单目误差边的处理
         // 同样的原理遍历双目的误差边
+        //; 其实对于单目来说，vpEdgesStereo就是一个空向量，所以下面的循环不会执行
         for(size_t i=0, iend=vpEdgesStereo.size(); i<iend; i++)
         {
             g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = vpEdgesStereo[i];

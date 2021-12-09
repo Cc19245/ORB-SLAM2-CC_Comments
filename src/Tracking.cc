@@ -487,13 +487,13 @@ void Tracking::Track()
                 // Local Mapping might have changed some MapPoints tracked in last frame
                 // Step 2.1 检查并更新上一帧被替换的MapPoints
                 // 局部建图线程则可能会对原有的地图点进行替换.在这里进行检查
-                CheckReplacedInLastFrame();
+                CheckReplacedInLastFrame();   //; 这个暂时没看
 
                 // Step 2.2 运动模型是空的或刚完成重定位，跟踪参考关键帧；否则恒速模型跟踪
                 // 第一个条件,如果运动速度为空,说明是刚初始化开始，或者已经跟丢了
                 // 第二个条件,如果当前帧紧紧地跟着在重定位的帧的后面，我们将重定位帧来恢复位姿
                 // mnLastRelocFrameId 上一次重定位的那一帧
-                if(mVelocity.empty() || mCurrentFrame.mnId<mnLastRelocFrameId+2)
+                if(mVelocity.empty() || mCurrentFrame.mnId < mnLastRelocFrameId+2)
                 {
                     // 用最近的关键帧来跟踪当前的普通帧
                     // 通过BoW的方式在参考帧中找当前帧特征点的匹配点
@@ -621,7 +621,7 @@ void Tracking::Track()
         }
 
         // 将最新的关键帧作为当前帧的参考关键帧
-        mCurrentFrame.mpReferenceKF = mpReferenceKF;
+        mCurrentFrame.mpReferenceKF = mpReferenceKF;   // 更新变量了，把当前帧的参考关键帧 赋值为 Tracking的参考关键帧
 
         // If we have an initial estimation of the camera pose and matching. Track the local map.
         // Step 3：在跟踪得到当前帧初始姿态后，现在对local map进行跟踪得到更多的匹配，并优化当前位姿
@@ -747,10 +747,11 @@ void Tracking::Track()
     if(!mCurrentFrame.mTcw.empty())
     {
         // 计算相对姿态Tcr = Tcw * Twr, Twr = Trw^-1
+        // 计算当前帧相对于当前帧的参考关键帧的位姿
         cv::Mat Tcr = mCurrentFrame.mTcw*mCurrentFrame.mpReferenceKF->GetPoseInverse();
         //保存各种状态
-        mlRelativeFramePoses.push_back(Tcr);
-        mlpReferences.push_back(mpReferenceKF);
+        mlRelativeFramePoses.push_back(Tcr);    // 存储当前帧相对当前帧的参考关键帧的位姿
+        mlpReferences.push_back(mpReferenceKF);  // 参考关键帧的列表
         mlFrameTimes.push_back(mCurrentFrame.mTimeStamp);
         mlbLost.push_back(mState==LOST);
     }
@@ -1124,11 +1125,12 @@ void Tracking::CreateInitialMapMonocular()
     mvpLocalKeyFrames.push_back(pKFini);
     // 单目初始化之后，得到的初始地图中的所有点都是局部地图点
     mvpLocalMapPoints=mpMap->GetAllMapPoints();
-    mpReferenceKF = pKFcur;
-    //也只能这样子设置了,毕竟是最近的关键帧
-    mCurrentFrame.mpReferenceKF = pKFcur;
+    mpReferenceKF = pKFcur;     // Tracking的参考关键帧赋值为当前关键帧，也就是最近的那个关键帧就是参考关键帧
 
-    mLastFrame = Frame(mCurrentFrame);
+    //也只能这样子设置了,毕竟是最近的关键帧
+    mCurrentFrame.mpReferenceKF = pKFcur;   // 当前帧的参考关键帧也是当前关键帧，因为这个是最近的
+
+    mLastFrame = Frame(mCurrentFrame);  // 更新上一帧的记录
 
     mpMap->SetReferenceMapPoints(mvpLocalMapPoints);
 
@@ -1190,18 +1192,19 @@ bool Tracking::TrackReferenceKeyFrame()
 
     // Step 2：通过词袋BoW加速当前帧与参考帧之间的特征点匹配
     int nmatches = matcher.SearchByBoW(
-        mpReferenceKF,          //参考关键帧    // 问题：去看这个参考关键帧是什么时候建立的？
+        mpReferenceKF,          //参考关键帧    //; 问题：去看这个参考关键帧是什么时候建立的？  自答：在单目初始化地图之后，最近的那个关键帧就是Tracking的RefKF
         mCurrentFrame,          //当前帧
         vpMapPointMatches);     //存储匹配关系，注意这里匹配的是当前帧中的所有特征点对应的地图点，匹配方法是如果当前帧中的某个特征点和参考帧中某个特征点描述子
         // 接近，那么就把参考帧中匹配的特征点对应的地图点赋值给当前帧特征点对应的地图点。也就是使用3D点匹配2D点
 
     // 匹配数目小于15，认为跟踪失败
-    if(nmatches<15)
+    if(nmatches<15)   //; 认为15个地图点就成功？有点太少了吧？
         return false;
 
     // Step 3:将上一帧的位姿态作为当前帧位姿的初始值
     mCurrentFrame.mvpMapPoints = vpMapPointMatches;
     mCurrentFrame.SetPose(mLastFrame.mTcw); // 用上一次的Tcw设置初值，在PoseOptimization可以收敛快一些
+    //; mLastFrame是上一个普通帧
 
     // Step 4:通过优化3D-2D的重投影误差来获得位姿
     // 3D点来自上面和关键帧的匹配得到的地图点，在数组中存储的位置就是对应的2D点的索引
@@ -1221,10 +1224,11 @@ bool Tracking::TrackReferenceKeyFrame()
                 //清除它在当前帧中存在过的痕迹
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
 
+                // 当前帧对应的地图点删除
                 mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
-                mCurrentFrame.mvbOutlier[i]=false;
-                pMP->mbTrackInView = false;
-                pMP->mnLastFrameSeen = mCurrentFrame.mnId;
+                mCurrentFrame.mvbOutlier[i]=false;   // 没有地图点了，指示地图点是否是外点自然也没有意义了
+                pMP->mbTrackInView = false;  // 这个地图点相关的显示也去掉
+                pMP->mnLastFrameSeen = mCurrentFrame.mnId;  //; ???
                 nmatches--;
             }
             else if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
@@ -1246,9 +1250,11 @@ void Tracking::UpdateLastFrame()
     // Update pose according to reference keyframe
     // Step 1：利用参考关键帧更新上一帧在世界坐标系下的位姿
     // 上一普通帧的参考关键帧，注意这里用的是参考关键帧（位姿准）而不是上上一帧的普通帧
-    KeyFrame* pRef = mLastFrame.mpReferenceKF;  
+    KeyFrame* pRef = mLastFrame.mpReferenceKF;  // 上一帧的参考关键帧
     // ref_keyframe 到 lastframe的位姿变换
     cv::Mat Tlr = mlRelativeFramePoses.back();  // mlRelativeFramePoses是一个vector
+    //; 这个里面存储的是上一帧到参考关键帧的位姿变换
+    //; 问题：看Tracking的参考关键帧和Frame的参考关键帧是什么时候被赋值的？他们是同一个关键帧吗？
 
     // 将上一帧的世界坐标系下的位姿计算出来
     // l:last, r:reference, w:world
@@ -1580,7 +1586,7 @@ bool Tracking::NeedNewKeyFrame()
     // Step 7.1：设定比例阈值，当前帧和参考关键帧跟踪到点的比例，比例越大，越倾向于增加关键帧
     float thRefRatio = 0.75f;
 
-    // 关键帧只有一帧，那么插入关键帧的阈值设置的低一点，插入频率较低
+    // 如果地图中的关键帧只有一帧，那么插入关键帧的阈值设置的低一点，插入频率较低
     if(nKFs<2)
         thRefRatio = 0.4f;
 
@@ -1825,7 +1831,7 @@ void Tracking::SearchLocalPoints()
             th=5;
 
         // 投影匹配得到更多的匹配关系
-        matcher.SearchByProjection(mCurrentFrame,mvpLocalMapPoints,th);
+        matcher.SearchByProjection(mCurrentFrame,mvpLocalMapPoints,th);  // 这个函数是有返回值的，这里却没接受这个返回值，感觉还是有点问题
     }
 }
 
@@ -1985,13 +1991,14 @@ void Tracking::UpdateLocalKeyFrames()
                 {
                     mvpLocalKeyFrames.push_back(pNeighKF);
                     pNeighKF->mnTrackReferenceForFrame=mCurrentFrame.mnId;
-                    //? 找到一个就直接跳出for循环？
+                    //? 找到一个就直接跳出for循环？所以这里很明显是有bug的
                     break;
                 }
             }
         }
 
         // 类型3:将一级共视关键帧的子关键帧作为局部关键帧（将邻居的孩子们拉拢入伙）
+        //; 不太理解这里用子关键帧的思想？？？
         const set<KeyFrame*> spChilds = pKF->GetChilds();
         for(set<KeyFrame*>::const_iterator sit=spChilds.begin(), send=spChilds.end(); sit!=send; sit++)
         {
@@ -2021,10 +2028,10 @@ void Tracking::UpdateLocalKeyFrames()
                 break;
             }
         }
-
     }
 
     // Step 3：更新当前帧的参考关键帧，与自己共视程度最高的关键帧作为参考关键帧
+    //; 这里可以看到，当前帧和Tracking的参考关键帧都是和当前帧共视程度最高的那个关键帧，也就是他们是一直保持同步的
     if(pKFmax)
     {
         mpReferenceKF = pKFmax;

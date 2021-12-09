@@ -1137,8 +1137,8 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
   const std::vector<TDescriptor>& features,  // 输入的描述子s
   BowVector &v, FeatureVector &fv, int levelsup) const
 {
-  v.clear();
-  fv.clear();
+  v.clear();     // 词袋向量
+  fv.clear();    // 特征向量
   
   if(empty()) // safe for subclasses
   {
@@ -1152,7 +1152,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
   
   typename vector<TDescriptor>::const_iterator fit;
   
-  if(m_weighting == TF || m_weighting == TF_IDF)
+  if(m_weighting == TF || m_weighting == TF_IDF)   // 计算权重的类型
   {
     unsigned int i_feature = 0;
     // 遍历图像中所有的特征点
@@ -1160,7 +1160,7 @@ void TemplatedVocabulary<TDescriptor,F>::transform(
     {
       WordId id;        // 叶子节点的Word id
       NodeId nid;       // FeatureVector 里的NodeId，用于加速搜索
-      WordValue w;      // 叶子节点Word对应的权重
+      WordValue w;      // 叶子节点Word对应的权重，也就是IDF的部分
 
       //  将当前描述子转化为Word id， Word weight，节点所属的父节点id（这里的父节点不是叶子的上一层，它距离叶子深度为levelsup）
       // w is the idf value if TF_IDF, 1 if TF 

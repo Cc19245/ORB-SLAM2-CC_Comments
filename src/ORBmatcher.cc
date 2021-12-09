@@ -94,13 +94,15 @@ int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoint
 
         // The size of the window will depend on the viewing direction
         // Step 2 设定搜索搜索窗口的大小。取决于视角, 若当前视角和平均视角夹角较小时, r取一个较小的值
-        float r = RadiusByViewingCos(pMP->mTrackViewCos);
+        //; 但是这个函数感觉挺鸡肋的，要么2.5，要么4.0，而且判断的角度阈值是0.36度？？？这跟没有有啥区别？
+        float r = RadiusByViewingCos(pMP->mTrackViewCos);   
         
         // 如果需要扩大范围搜索，则乘以阈值th
         if(bFactor)
             r*=th;
 
         // Step 3 通过投影点以及搜索窗口和预测的尺度进行搜索, 找出搜索半径内的候选匹配点索引
+        //; 只选特定金字塔层级上的特征点，应该也是为了后面的加速匹配，让候选的特征点数量不要太多
         const vector<size_t> vIndices =
                 F.GetFeaturesInArea(pMP->mTrackProjX,pMP->mTrackProjY,      // 该地图点投影到一帧上的坐标
                                     r*F.mvScaleFactors[nPredictedLevel],    // 认为搜索窗口的大小和该特征点被追踪到时所处的尺度也有关系
@@ -171,8 +173,11 @@ int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoint
         {
             // 条件1：bestLevel==bestLevel2 表示 最佳和次佳在同一金字塔层级。
             // CC: 玄学，这是什么要求？
-            // 条件2：bestDist>mfNNratio*bestDist2 表示最佳和次佳距离不满足阈值比例。理论来说 bestDist/bestDist2 越小越好
-            if(bestLevel==bestLevel2 && bestDist>mfNNratio*bestDist2)
+            // 条件2：bestDist>mfNNratio*bestDist2 表示最佳和次佳距离不满足阈值比例。 理论来说 bestDist/bestDist2 越小越好
+            //; 这个其实还是比较合理的，因为如果最佳和次佳的特征点不在同一金字塔层上，那么最佳匹配特征点的唯一性就满足了
+            //; 如果在同一层上，那么就有点危险了，此时如果满足最佳的距离小于次佳的距离*ratio，那么最佳特征点的唯一性也能满足
+            //; 唯一性不满足的就是在同一层上，而且不满足比例要求！
+            if(bestLevel==bestLevel2 && bestDist>mfNNratio*bestDist2)  // mfNNratio 是最优和次优的比例，是为了保证特征点的唯一性
                 continue;
 
             //保存结果: 为Frame中的特征点增加对应的MapPoint
@@ -335,7 +340,7 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
                     const unsigned int realIdxF = vIndicesF[iF];
 
                     // 如果地图点存在，说明这个点已经被匹配过了，不再匹配，加快速度
-                    if(vpMapPointMatches[realIdxF])
+                    if(vpMapPointMatches[realIdxF])  // 普通帧中的这个特征点已经有匹配的地图点了，那么说明已经匹配上了之前循环中的地图点
                         continue;
 
                     const cv::Mat &dF = F.mDescriptors.row(realIdxF); // 取出F中该特征对应的描述子
@@ -1736,7 +1741,7 @@ int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &
  * @param[in] bMono                 是否为单目
  * @return int                      成功匹配的数量
  */
-//Done
+//Done  注意这里是给恒速模型跟踪的时候，从上一帧的地图点中投影到当前帧的图像中
 int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
 {
     int nmatches = 0;
@@ -1767,6 +1772,7 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
     const cv::Mat tlc = Rlw*twc+tlw; 
 
     // 判断前进还是后退。感觉这个判断前进后退的阈值比较玄学，为什么就选了基线距离？
+    // 对单目来说，这两个变量都是false，也就是没有判断前进还是后退
     const bool bForward = tlc.at<float>(2) > CurrentFrame.mb && !bMono;     // 非单目情况，如果Z大于基线，则表示相机明显前进
     const bool bBackward = -tlc.at<float>(2) > CurrentFrame.mb && !bMono;   // 非单目情况，如果-Z小于基线，则表示相机明显后退
 
