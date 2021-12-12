@@ -282,6 +282,8 @@ void MapPoint::Replace(MapPoint* pMP)
 
     // 所有能观测到原地图点的关键帧都要复制到替换的地图点上
     //- 将观测到当前地图的的关键帧的信息进行更新
+    //; obs是this地图点的观测关系，first是被哪个关键帧观测到，second是对应于这个关键帧中特征点的索引
+    //; 遍历观测到这个地图点的所有关键帧
     for(map<KeyFrame*,size_t>::iterator mit=obs.begin(), mend=obs.end(); mit!=mend; mit++)
     {
         // Replace measurement in keyframe
@@ -299,7 +301,7 @@ void MapPoint::Replace(MapPoint* pMP)
             // 产生冲突，即pKF中有两个特征点a,b（这两个特征点的描述子是近似相同的），这两个特征点对应两个 MapPoint 为this,pMP
             // 然而在fuse的过程中pMP的观测更多，需要替换this，因此保留b与pMP的联系，去掉a与this的联系
             //说白了,既然是让对方的那个地图点来代替当前的地图点,就是说明对方更好,所以删除这个关键帧对当前帧的观测
-            pKF->EraseMapPointMatch(mit->second);
+            pKF->EraseMapPointMatch(mit->second); 
         }
     }
 
@@ -307,10 +309,11 @@ void MapPoint::Replace(MapPoint* pMP)
     pMP->IncreaseFound(nfound);
     pMP->IncreaseVisible(nvisible);
     //描述子更新
+    //; 注意这里为什么没有更新观测方向和深度？
     pMP->ComputeDistinctiveDescriptors();
 
     //告知地图,删掉我
-    mpMap->EraseMapPoint(this);
+    mpMap->EraseMapPoint(this);   //; 在map中删除这个地图点的指针
 }
 
 // 没有经过 MapPointCulling 检测的MapPoints, 认为是坏掉的点

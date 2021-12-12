@@ -52,7 +52,8 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     mBowVec(F.mBowVec), mFeatVec(F.mFeatVec), mnScaleLevels(F.mnScaleLevels), mfScaleFactor(F.mfScaleFactor),
     mfLogScaleFactor(F.mfLogScaleFactor), mvScaleFactors(F.mvScaleFactors), mvLevelSigma2(F.mvLevelSigma2),
     mvInvLevelSigma2(F.mvInvLevelSigma2), mnMinX(F.mnMinX), mnMinY(F.mnMinY), mnMaxX(F.mnMaxX),
-    mnMaxY(F.mnMaxY), mK(F.mK), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),
+    //; 注意下面这一行中，mvpMapPoints(F.mvpMapPoints)， 把当前普通帧的每个特征点对应的地图点匹配关系赋值给了关键帧
+    mnMaxY(F.mnMaxY), mK(F.mK), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),    
     mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
     mbToBeErased(false), mbBad(false), 
     mHalfBaseline(F.mb/2),      // 计算双目相机长度的一半
@@ -485,7 +486,7 @@ void KeyFrame::UpdateConnections()
             vPairs.push_back(make_pair(mit->second,mit->first));
             // 对方关键帧也要添加这个信息
             // 更新KFcounter中该关键帧的mConnectedKeyFrameWeights
-            // 更新其它KeyFrame的mConnectedKeyFrameWeights，更新其它关键帧与当前帧的连接权重
+            //; 更新其它KeyFrame的mConnectedKeyFrameWeights，更新其它关键帧与当前帧的连接权重
             (mit->first)->AddConnection(this,mit->second);  // mit->first是和当前帧满足公式关系的那一帧，那一帧也要添加和当前帧的共视关系
         }
     }
@@ -519,12 +520,13 @@ void KeyFrame::UpdateConnections()
 
         // mspConnectedKeyFrames = spConnectedKeyFrames;
         // 更新当前帧与其它关键帧的连接权重
-        // 注意这里才更新当前帧和其他帧的连接关系！
+        //; 注意这里才更新当前帧和其他帧的连接关系！
         mConnectedKeyFrameWeights = KFcounter;
         mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
         mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 
         // Step 5 更新生成树的连接
+        //; mbFirstConnection 指示当前关键帧是否第一次加入生成树中，默认为true。所以一般情况下这个if判断总是成立的
         if(mbFirstConnection && mnId!=0)
         {
             // 初始化该关键帧的父关键帧为共视程度最高的那个关键帧

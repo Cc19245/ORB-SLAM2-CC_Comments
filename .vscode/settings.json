@@ -137,6 +137,9 @@
 		"valarray": "cpp",
 		"unordered_set": "cpp",
 		"memory_resource": "cpp",
-		"random": "cpp"
-	}
+		"random": "cpp",
+		"jacobi": "cpp",
+		"core": "cpp"
+	},
+	"ros.distro": "melodic"
 }

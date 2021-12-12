@@ -463,7 +463,29 @@ int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapP
 
     // Decompose Scw
     // Step 1 分解Sim变换矩阵
+    //; Scw是世界坐标系到当前帧的Sim3变换
+    //; 也就是对于世界坐标系中的一个3D点X_w，如果将其变换到当前帧的相机坐标系下，不是一个简单的欧式变换（旋转+平移），
+    //; 而是一个sim3变换，也就是先旋转，然后有一个尺度因子的缩放，最后再平移让两个坐标系的原点对齐
     //? 为什么要剥离尺度信息？
+    //; CC解答：
+    /* 要搞明白这个问题，需要时刻记住当前这个函数想干什么：就是在闭环候选帧的地图点中寻找更多的和当前关键帧匹配的地图点（不包括已经和当前关键帧匹配的地图点）！
+
+       这个函数传入了一个Scw，也就是上一步计算出来的 世界坐标系 到 当前帧相机坐标系的变换关系，这个变换关系一个最重要的贡献就是指明了两个坐标系之间存在尺度
+       漂移，也就是矩阵中的s项。如果这个s项为1，那么Scw就从sim3变换退化成了欧式变换，也就是只有旋转和平移，尺度保持不变。而这个s项的大小，就是说明c和w两个
+       坐标系之间存在多大的尺度变化。
+
+       1.首先分析这个s对于坐标变换有什么影响：世界坐标系中的点Xw变换到当前帧相机坐标系下结果，使用正常的sim3变换计算出来的相机坐标系下的坐标是 
+          Xc = sR*Xw + t； 使用代码中剥离掉尺度因子s计算出来的坐标是 Xc'= R*Xw + t/s = 1/s * Xc。 从这结果可以看到，代码中计算出来的坐标和
+          使用sim3计算出来的坐标就是差了一个尺度因子s。相当于两个坐标点是同向的，只不过离原点的距离差s倍。
+       2.对于相机中心在世界坐标系下的坐标：使用正常的sim3变换，得Ow = -1/s * R.t * t； 使用代码中剥离掉尺度因子s计算出来的坐标：
+          Ow = -1/s^2 * R.t * t。可见二者也是同向的，也只是距离世界坐标的原点差了s倍。
+
+       3.回到函数的目的，寻找和当前帧匹配的地图点。看筛选条件：
+        （1）3D地图点投影到当前相机的像素坐标要有效：由于1中已经论述两种情况得到的在相机坐标系下的坐标是同向的，也就是在相机的同一条光线上，
+            所以他们投影的像素点是相同的
+        （2）计算3D地图点到当前相机的向量，计算向量长度得到3D点离相机的距离，这个距离要在 “创建这个3D地图点时预测出来的能够在金字塔中检测到这个3D点
+            对应的特征点的距离范围” 之内。那么选择那种方式计算出来的Ow作为相机中心在世界坐标系下的坐标呢？
+    */
     cv::Mat sRcw = Scw.rowRange(0,3).colRange(0,3);
     const float scw = sqrt(sRcw.row(0).dot(sRcw.row(0)));   // 计算得到尺度s
     cv::Mat Rcw = sRcw/scw;                                 // 保证旋转矩阵行列式为1
@@ -492,8 +514,12 @@ int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapP
         // Step 2.2 投影到当前KF的图像坐标并判断是否有效
         cv::Mat p3Dw = pMP->GetWorldPos();
 
-        // Transform into Camera Coords.
-        cv::Mat p3Dc = Rcw*p3Dw+tcw;
+        // Transform into Camera Coords.  
+        //; 变换到相机坐标系下，注意这里没有使用求出来的sim3变换，而是使用了去除尺度的欧式变换，为什么？
+        //; CC：在sim3中尺度s只是改变了旋转后的缩放，对平移没有影响。所以对于sim3和去除s的sim3（欧式变换），
+        //; 他们变换之后的坐标也只是差了一个尺度因子s，其他没有影响。相当于最后变换后的点的坐标是成倍数关系的，这个倍数关系就是s
+        //; 疑问：注意看上面的代码，作者把平移向量也去掉了尺度s，所以最后使用单纯的sim3和代码中写的这种方式，坐标之间就是单纯差一个倍数关系
+        cv::Mat p3Dc = Rcw*p3Dw+tcw;  //; 这个是相机坐标系下的地图点
 
         // Depth must be positive
         // 深度值必须为正
@@ -518,6 +544,13 @@ int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapP
         const float maxDistance = pMP->GetMaxDistanceInvariance();
         const float minDistance = pMP->GetMinDistanceInvariance();
         // 地图点到相机光心的向量
+        //; 剥离尺度因子s造成的真正影响在于当前帧的相机中心在世界坐标系中的坐标Ow
+        //; pMP是闭环候选帧的地图点，因为认为闭环候选帧是在刚开始的时候产生的，所以其尺度漂移不严重，故认为闭环候选帧的相机坐标系和
+        //; 世界坐标系之间是欧式变换，或者说是s=1的sim3变换。那么上面的maxDistance和minDistance就是没有尺度漂移的距离。
+        //; 下面一句计算这个地图点到当前帧相机中心的向量PO和距离，注意这个地图点还是没有漂移的，如果Ow是有漂移的，那么计算出来的这个距离就
+        //; 没有参考价值了，因为最后就是要使用这个距离去评估这个地图点是否有可能出现在当前帧相机的深度范围内（maxDistance和minDistance就是
+        //; 依据能在金字塔中检测到这个地图点来确定的），所以说这里需要舍弃s的影响，考虑纯欧式变换时这个地图点离相机的距离，从而判断这个地图点是否在
+        //; 相机的可视深度范围内
         cv::Mat PO = p3Dw-Ow;
         const float dist = cv::norm(PO);
 
@@ -941,7 +974,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
 
     int nmatches=0;
     // 记录匹配是否成功，避免重复匹配
-    vector<bool> vbMatched2(pKF2->N,false);        
+    vector<bool> vbMatched2(pKF2->N,false);     //; 第二个关键帧中的特征点是否已经找到在第一个关键帧中的特征点匹配 
     vector<int> vMatches12(pKF1->N,-1);
     // 用于统计匹配点对旋转差的直方图
     vector<int> rotHist[HISTO_LENGTH];
@@ -982,6 +1015,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
                     continue;
 
                 // 如果mvuRight中的值大于0，表示是双目，且该特征点有深度值
+                //; 对于单目，是false
                 const bool bStereo1 = pKF1->mvuRight[idx1]>=0;
 
                 if(bOnlyStereo)
@@ -1011,6 +1045,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
                     if(vbMatched2[idx2] || pMP2)
                         continue;
 
+                    //; 对于单目，是false
                     const bool bStereo2 = pKF2->mvuRight[idx2]>=0;
 
                     if(bOnlyStereo)
@@ -1023,7 +1058,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
                     // Step 2.6 计算idx1与idx2在两个关键帧中对应特征点的描述子距离
                     const int dist = DescriptorDistance(d1,d2);
                     
-                    if(dist>TH_LOW || dist>bestDist)
+                    if(dist>TH_LOW || dist>bestDist)  //; 描述子距离不满足，或者这个距离大于最好的距离
                         continue;
 
                     // 通过特征点索引idx2在pKF2中取出对应的特征点
@@ -1031,6 +1066,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
 
                     //? 为什么双目就不需要判断像素点到极点的距离的判断？
                     // 因为双目模式下可以左右互匹配恢复三维点
+                    //; 如果是单目图像
                     if(!bStereo1 && !bStereo2)  //; 这两个关键帧中的特征点都不是双目。这么麻烦，直接判断传感器是不是双目不就行了？
                     {
                         const float distex = ex-kp2.pt.x;
@@ -1048,7 +1084,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
                     {
                         // bestIdx2，bestDist 是 kp1 对应 KF2中的最佳匹配点 index及匹配距离
                         bestIdx2 = idx2;
-                        bestDist = dist;
+                        bestDist = dist;  //; 两个匹配的特征点的描述子的距离
                     }
                 }
 
@@ -1106,6 +1142,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
                 continue;
             for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
             {              
+                //; 不过其实这里这个变量已经没用了，清除与否没影响
                 vbMatched2[vMatches12[rotHist[i][j]]] = false;  // !清除匹配关系。原作者漏掉！
                 vMatches12[rotHist[i][j]]=-1;
                 nmatches--;
@@ -1122,7 +1159,7 @@ int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F
     {
         if(vMatches12[i]<0)
             continue;
-        vMatchedPairs.push_back(make_pair(i,vMatches12[i]));
+        vMatchedPairs.push_back(make_pair(i,vMatches12[i]));   // KF1中的第i个特征点和KF2中的第vMatches12[i]个特征点相互匹配
     }
 
     return nmatches;
@@ -1339,6 +1376,7 @@ int ORBmatcher::Fuse(KeyFrame *pKF, cv::Mat Scw, const vector<MapPoint *> &vpPoi
 
     // Set of MapPoints already found in the KeyFrame
     // 当前帧已有的匹配地图点
+    //; 当前帧的共视关键帧，创建的时候就有的地图点
     const set<MapPoint*> spAlreadyFound = pKF->GetMapPoints();
 
     int nFused=0;
@@ -1361,6 +1399,8 @@ int ORBmatcher::Fuse(KeyFrame *pKF, cv::Mat Scw, const vector<MapPoint *> &vpPoi
         cv::Mat p3Dw = pMP->GetWorldPos();
 
         // Transform into Camera Coords.
+        //; 这一步比较重要，是把闭环候选帧及其共视关键帧的所有地图点（世界坐标是准确的，因为这些关键帧是在系统初始的时候创建的）
+        //; 转换到校正后的当前帧的共视关键帧的相机坐标系下，注意最后这个3D坐标和使用sim3变换后的坐标差一个比例因子s。
         cv::Mat p3Dc = Rcw*p3Dw+tcw;
 
         // Depth must be positive

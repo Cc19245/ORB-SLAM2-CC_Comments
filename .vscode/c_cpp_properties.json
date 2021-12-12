@@ -14,7 +14,7 @@
                 "_UNICODE"
             ],     
             "cStandard": "c11",
-            "cppStandard": "c++17",
+            "cppStandard": "c++14"
         }
     ],
     "version": 4

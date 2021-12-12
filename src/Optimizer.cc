@@ -908,8 +908,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         // 遍历所有的单目误差边
         for(size_t i=0, iend=vpEdgesMono.size(); i<iend;i++)
         {
-            g2o::EdgeSE3ProjectXYZ* e = vpEdgesMono[i];
-            MapPoint* pMP = vpMapPointEdgeMono[i];
+            g2o::EdgeSE3ProjectXYZ* e = vpEdgesMono[i];     //; 图优化中的边，也就是投影误差
+            MapPoint* pMP = vpMapPointEdgeMono[i];    //; 上面的这条边对应的地图点
 
             if(pMP->isBad())
                 continue;
@@ -970,8 +970,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         if(e->chi2()>5.991 || !e->isDepthPositive())
         {
             // outlier
-            KeyFrame* pKFi = vpEdgeKFMono[i];
-            vToErase.push_back(make_pair(pKFi,pMP));
+            KeyFrame* pKFi = vpEdgeKFMono[i];  
+            vToErase.push_back(make_pair(pKFi,pMP));  // 这条边有问题，那么对应的这条边链接的两个顶点，也就是位姿和地图点也要删掉了
         }
     }
 
@@ -1003,8 +1003,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         {
             KeyFrame* pKFi = vToErase[i].first;
             MapPoint* pMPi = vToErase[i].second;
-            pKFi->EraseMapPointMatch(pMPi);
-            pMPi->EraseObservation(pKFi);
+            pKFi->EraseMapPointMatch(pMPi);   // 删除这个关键帧对地图点的观测
+            pMPi->EraseObservation(pKFi);     // 删除这个地图点对关键帧的被观测
         }
     }
 
@@ -1017,7 +1017,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         KeyFrame* pKF = *lit;
         g2o::VertexSE3Expmap* vSE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(pKF->mnId));
         g2o::SE3Quat SE3quat = vSE3->estimate();
-        pKF->SetPose(Converter::toCvMat(SE3quat));
+        //; 既然上面优化后有离群的边，那么这里对应的位姿应该不更新吧？
+        pKF->SetPose(Converter::toCvMat(SE3quat));  
     }
 
     //Points
@@ -1075,7 +1076,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
     const unsigned int nMaxKFid = pMap->GetMaxKFid();
 
     // 记录所有优化前关键帧的位姿，优先使用在闭环时通过Sim3传播调整过的Sim3位姿
-    vector<g2o::Sim3,Eigen::aligned_allocator<g2o::Sim3> > vScw(nMaxKFid+1);
+    vector<g2o::Sim3,Eigen::aligned_allocator<g2o::Sim3> > vScw(nMaxKFid+1);        //; 优化前的位姿，如果是当前帧的共视关键帧，那么就使用校正后的sim3
     // 记录所有关键帧经过本次本质图优化过的位姿
     vector<g2o::Sim3,Eigen::aligned_allocator<g2o::Sim3> > vCorrectedSwc(nMaxKFid+1);
     // 这个变量没有用
@@ -1101,6 +1102,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
         if(it!=CorrectedSim3.end())
         {
             // 如果该关键帧在闭环时通过Sim3传播调整过，优先用调整后的Sim3位姿
+            //; 这里添加的是当前帧的共视关键帧的校正后的位姿作为顶点
             vScw[nIDi] = it->second;
             VSim3->setEstimate(it->second);
         }
@@ -1116,7 +1118,8 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 
         // 闭环匹配上的帧不进行位姿优化（认为是准确的，作为基准）
         // 注意这里并没有锁住第0个关键帧，所以初始关键帧位姿也做了优化
-        if(pKF==pLoopKF)
+        //; 把检测到的闭环关键帧锁定了，但是这里没有锁住第0个关键帧，这好像有点问题？为什么不锁住第0个关键帧？
+        if(pKF==pLoopKF)  
             VSim3->setFixed(true);
 
         VSim3->setId(nIDi);
@@ -1138,13 +1141,14 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 
     // Set Loop edges
     // Step 3：添加第1种边：闭环时因为地图点调整而出现的关键帧间的新连接关系
+    //; LoopConnections 是 当前帧的共视关键帧 和 闭环关键帧和其共视关键帧 之间的连接关系
     for(map<KeyFrame *, set<KeyFrame *> >::const_iterator mit = LoopConnections.begin(), mend=LoopConnections.end(); mit!=mend; mit++)
     {
         KeyFrame* pKF = mit->first;
         const long unsigned int nIDi = pKF->mnId;
         // 和pKF 形成新连接关系的关键帧
         const set<KeyFrame*> &spConnections = mit->second;
-        const g2o::Sim3 Siw = vScw[nIDi];
+        const g2o::Sim3 Siw = vScw[nIDi];   //; 当前帧的这个共视关键帧的sim3变换，注意是校正过的
         const g2o::Sim3 Swi = Siw.inverse();
 
         // 对于当前关键帧nIDi而言，遍历每一个新添加的关键帧nIDj链接关系
@@ -1161,9 +1165,10 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             // 通过上面考验的帧有两种情况：
             // 1、恰好是当前帧及其闭环帧 nIDi=pCurKF 并且nIDj=pLoopKF（此时忽略共视程度）
             // 2、任意两对关键帧，共视程度大于100
-            const g2o::Sim3 Sjw = vScw[nIDj];
+            //; 也就是说，对于当前帧和它对应的闭环帧，是一定要添加边的。对于当前帧的共视关键帧和闭环帧的共视关键帧之间的关系，则需要共视程度>100才添加这个边
+            const g2o::Sim3 Sjw = vScw[nIDj];  //; 闭环关键帧的共视关键帧的sim3变换
             // 得到两个位姿间的Sim3变换
-            const g2o::Sim3 Sji = Sjw * Swi;
+            const g2o::Sim3 Sji = Sjw * Swi;   //; Sjw是绝对准确的，而Swi是校正过的，所以两个都是准的
 
             g2o::EdgeSim3* e = new g2o::EdgeSim3();
             e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(nIDj)));
@@ -1175,6 +1180,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             e->information() = matLambda;
             optimizer.addEdge(e);
             // 保证id小的在前,大的在后
+            //; nIDi是当前帧的共视关键帧ID， nIDj是闭环关键帧的共视关键帧的ID
             sInsertedEdges.insert(make_pair(min(nIDi,nIDj),max(nIDi,nIDj)));
         } 
     }
@@ -1187,17 +1193,23 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
         const int nIDi = pKF->mnId;
         g2o::Sim3 Swi;
 
+        //; NonCorrectedSim3 是当前帧的共视关键帧中没有校正过的sim3位姿
         LoopClosing::KeyFrameAndPose::const_iterator iti = NonCorrectedSim3.find(pKF);
-        if(iti!=NonCorrectedSim3.end())
+        //; 这里在当前帧的共视关键帧中找到了，那么就使用没有经过sim3校正的位姿。
+        //; CC: 这里的目的就是要使用原来的关键帧位姿构造的尺度为1的Sim3变换。因为vScw这个变量中存的是两种，一种是当前关键帧的共视关键帧的经过校正的sim3位姿
+        //; 另一种就是非当前关键帧的共视关键帧，那么直接就是用他们的位姿构造s=1的sim3变换，也就是欧式变换。所以这里判断的目的，就是所有的位姿都要使用原来的
+        //; 位姿构造的sim3，不包含任何校正
+        if(iti!=NonCorrectedSim3.end())    
             Swi = (iti->second).inverse();  //优先使用未经过Sim3传播调整的位姿
         else
+            //; CC：下面这句话的注释是错误的！
             Swi = vScw[nIDi].inverse();     //没找到才考虑已经经过Sim3传播调整的位姿
 
         KeyFrame* pParentKF = pKF->GetParent();
 
         // Spanning tree edge
         // Step 4.1：添加第2种边：生成树的边（有父关键帧）
-        // 父关键帧就是和当前帧共视程度最高的关键帧
+        //; 父关键帧就是和当前帧共视程度最高的关键帧
         if(pParentKF)
         {
             // 父关键帧id
@@ -1206,6 +1218,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             LoopClosing::KeyFrameAndPose::const_iterator itj = NonCorrectedSim3.find(pParentKF);
 
             //优先使用未经过Sim3传播调整的位姿
+            //; 同理，这里也是要使用没有任何校正的sim3变换
             if(itj!=NonCorrectedSim3.end())
                 Sjw = itj->second;
             else
@@ -1227,16 +1240,21 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
         // Loop edges
         // Step 4.2：添加第3种边：当前帧与闭环匹配帧之间的连接关系(这里面也包括了当前遍历到的这个关键帧之前曾经存在过的回环边)
         // 获取和当前关键帧形成闭环关系的关键帧
-        const set<KeyFrame*> sLoopEdges = pKF->GetLoopEdges();
+        //; 和当前关键帧有闭环关系的那个关键帧。注意这里是必要的，因为pKF可能是之前形成闭环的关键帧，而不是当前形成闭环的关键帧，
+        //; 所以之前形成的闭环也要添加
+        const set<KeyFrame*> sLoopEdges = pKF->GetLoopEdges();  
         for(set<KeyFrame*>::const_iterator sit=sLoopEdges.begin(), send=sLoopEdges.end(); sit!=send; sit++)
         {
             KeyFrame* pLKF = *sit;
             // 注意要比当前遍历到的这个关键帧的id小,这个是为了避免重复添加
-            if(pLKF->mnId<pKF->mnId)
+            //; 有闭环关系的关键帧ID要 小于 当前关键帧的ID，为了避免重复添加，因为闭环关系是相互的，互为闭环关系。
+            //; 比如pKFId = 10, PLKFId = 35, 那么遍历到10这个关键帧的时候添加了边，遍历到35这个关键帧的时候就不能再添加边了
+            if(pLKF->mnId<pKF->mnId) 
             {
                 g2o::Sim3 Slw;
                 LoopClosing::KeyFrameAndPose::const_iterator itl = NonCorrectedSim3.find(pLKF);
                 //优先使用未经过Sim3传播调整的位姿
+                //; 这里还是使用未经任何sim3校正的位姿
                 if(itl!=NonCorrectedSim3.end())
                     Slw = itl->second;
                 else
@@ -1262,12 +1280,16 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
             KeyFrame* pKFn = *vit;
             // 避免重复添加
             // 避免以下情况：最小生成树中的父子关键帧关系,以及和当前遍历到的关键帧构成了回环关系
+            //; pKFn!=pParentKF：不能是这帧的父亲，因为这个关系已经在生成树中添加过了。
+            //; !pKF->hasChild(pKFn)：不能是这帧的儿子，因为遍历到儿子帧的时候，会把这帧当做儿子帧的父亲，通过生成树添加
+            //; !sLoopEdges.count(pKFn)：不能是这帧的闭环帧，因为在上面已经单独添加过闭环帧了
             if(pKFn && pKFn!=pParentKF && !pKF->hasChild(pKFn) && !sLoopEdges.count(pKFn)) 
             {
                 // 注意要比当前遍历到的这个关键帧的id要小,这个是为了避免重复添加
                 if(!pKFn->isBad() && pKFn->mnId<pKF->mnId)
                 {
                     // 如果这条边已经添加了，跳过
+                    //; 注意这里又判断这个条件，是因为对于step3中添加的那些边不好统计，所以使用了sInsertedEdges这个变量进行统计，因此这里要排除
                     if(sInsertedEdges.count(make_pair(min(pKF->mnId,pKFn->mnId),max(pKF->mnId,pKFn->mnId))))
                         continue;
 
@@ -1316,6 +1338,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
         double s = CorrectedSiw.scale();
 
         // 转换成尺度为1的变换矩阵的形式
+        //; 这里关于sim3转欧式变换还是不太懂？
         eigt *=(1./s); //[R t/s;0 1]
         cv::Mat Tiw = Converter::toCvSE3(eigR,eigt);
 

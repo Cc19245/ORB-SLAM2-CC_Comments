@@ -114,6 +114,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
 {
     // 取出与当前关键帧相连（>15个共视地图点）的所有关键帧，这些相连关键帧都是局部相连，在闭环检测的时候将被剔除
     // 相连关键帧定义见 KeyFrame::UpdateConnections()
+    //; 这个取出来的就是有共视关系的关键帧，是没有排过序的
     set<KeyFrame*> spConnectedKeyFrames = pKF->GetConnectedKeyFrames();
 
     // 用于保存可能与当前关键帧形成闭环的候选帧（只要有相同的word，且不属于局部相连（共视）帧）
@@ -152,7 +153,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
                 pKFi->mnLoopWords++;// 记录pKFi与pKF具有相同word的个数
             }
         }
-    }
+    }//; 到这里，就提取出了和当前帧有相同的单词，但是不在当前帧的共视关键帧中的那些关键帧
 
     // 如果没有关键帧和这个关键帧具有相同的单词,那么就返回空
     if(lKFsSharingWords.empty())
@@ -218,13 +219,15 @@ vector<KeyFrame*> KeyFrameDatabase::DetectLoopCandidates(KeyFrame* pKF, float mi
         {
             KeyFrame* pKF2 = *vit;
             // 只有pKF2也在闭环候选帧中，且公共单词数超过最小要求，才能贡献分数
+            //; 其实感觉下面这个判断还是有重复的，因为第二个条件满足的话，第一个条件肯定满足。因为统计共同单词数的时候，
+            //; 只要有共同单词数，那么前面这个条件就肯定满足了
             if(pKF2->mnLoopQuery==pKF->mnId && pKF2->mnLoopWords>minCommonWords)
             {
                 accScore+=pKF2->mLoopScore;
                 // 统计得到组里分数最高的关键帧
                 if(pKF2->mLoopScore>bestScore)
                 {
-                    pBestKF=pKF2;
+                    pBestKF=pKF2;   //; 这个bestKF有几个属性：1.和当前这个候选帧有公共单词 2.是当前帧的共视图 3.是满足前两个条件中的得分最高的那个KF
                     bestScore = pKF2->mLoopScore;
                 }
             }
@@ -295,8 +298,10 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
                 if(pKFi->mnRelocQuery!=F->mnId)
                 {
                     // pKFi还没有标记为F的重定位候选帧
+                    //; 这里为什么要手动给赋值为0？
+                    //; 自答：因为这里是第一次发现这个关键帧，而最后是要统计关键帧和当前帧包含的相同的单词的个数，所以这里第一次要初始化为0
                     pKFi->mnRelocWords=0;  // 当前关键帧和要进行重定位的帧之间的相同单词的个数
-                    pKFi->mnRelocQuery=F->mnId;
+                    pKFi->mnRelocQuery=F->mnId;   // 声明这个关键帧已经被选择为当前帧的词袋匹配候选关键帧
                     lKFsSharingWords.push_back(pKFi);
                 }
                 pKFi->mnRelocWords++;
@@ -319,7 +324,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
     // 阈值1：最小公共单词数为最大公共单词数目的0.8倍
     int minCommonWords = maxCommonWords*0.8f;
 
-    list<pair<float,KeyFrame*> > lScoreAndMatch;  // 满足公共单词个数限制的关键帧，并且计算这些关键帧和重定位帧字典的得分
+    list<pair<float,KeyFrame*> > lScoreAndMatch;  // 公共单词个数>预制1的关键帧，并且计算这些关键帧和重定位帧字典的得分
 
     int nscores=0;
 
@@ -336,15 +341,15 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
             // 用mBowVec来计算两者的相似度得分
             // const ORBVocabulary* mpVoc;   预先训练好的字典
             float si = mpVoc->score(F->mBowVec,pKFi->mBowVec);  // 使用训练好的字典，计算重定位帧和这个关键帧的词袋匹配得分
-            pKFi->mRelocScore=si;
+            pKFi->mRelocScore=si;   // 重定位的匹配得分
             lScoreAndMatch.push_back(make_pair(si,pKFi));
         }
     }
 
-    if(lScoreAndMatch.empty())
+    if(lScoreAndMatch.empty())   // 满足上述阈值1的关键帧没有，那么这里也直接返回空
         return vector<KeyFrame*>();
 
-    list<pair<float,KeyFrame*> > lAccScoreAndMatch;
+    list<pair<float,KeyFrame*> > lAccScoreAndMatch;   // 在上面的结果中再次筛选
     float bestAccScore = 0;
 
     // Lets now accumulate score by covisibility
@@ -356,7 +361,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
         // 取出与关键帧pKFi共视程度最高的前10个关键帧
         vector<KeyFrame*> vpNeighs = pKFi->GetBestCovisibilityKeyFrames(10);
 
-        // 该组最高分数
+        // 该组最高分数，用于挑选该组中最有代表性的那个关键帧
         float bestScore = it->first; 
         // 该组累计得分
         float accScore = bestScore;  
@@ -366,12 +371,15 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
         for(vector<KeyFrame*>::iterator vit=vpNeighs.begin(), vend=vpNeighs.end(); vit!=vend; vit++)
         {
             KeyFrame* pKF2 = *vit;
-            if(pKF2->mnRelocQuery!=F->mnId)
+            //; 这个关键帧必须是上面使用词袋匹配的候选关键帧中的
+            //; 这个也很好理解，就是这个关键帧如果和当前帧一个公共单词都没有的话，那么这个关键帧应该和当前帧是几乎没有公示区域的
+            if(pKF2->mnRelocQuery!=F->mnId)  
                 continue;
             // 只有pKF2也在重定位候选帧中，才能贡献分数
             // CC: ??? 上面只对和重定位帧的相同单词个数>0.8*最大单词相同单词个数 的 关键帧计算了分数，如果这里的pKF2不在这个范围内，那么他不就没有分数了吗？
             // 这样最后计算小组得分的时候实际贡献分数的还是在按照阈值1筛选出来的关键帧中啊！
-            accScore+=pKF2->mRelocScore;
+            //; 再次看这个部分确实是这样，感觉这里是有问题的！
+            accScore += pKF2->mRelocScore;
 
             // 统计得到组里分数最高的KeyFrame
             if(pKF2->mRelocScore>bestScore)
@@ -403,7 +411,7 @@ vector<KeyFrame*> KeyFrameDatabase::DetectRelocalizationCandidates(Frame *F)
         {
             KeyFrame* pKFi = it->second;
             // 判断该pKFi是否已经添加在队列中了
-            if(!spAlreadyAddedKF.count(pKFi))
+            if(!spAlreadyAddedKF.count(pKFi))   //; 使用这个辅助变量可能是因为他是set类型的数据结构，count的时候更快？
             {
                 vpRelocCandidates.push_back(pKFi);
                 spAlreadyAddedKF.insert(pKFi);  

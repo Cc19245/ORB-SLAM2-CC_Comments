@@ -88,8 +88,12 @@ void LocalMapping::Run()
         {
             // BoW conversion and insertion in Map
             // Step 2 处理列表中的关键帧，包括计算BoW、更新观测、描述子、共视图，插入到地图等
+            //; 计算这个关键帧的词袋向量，对关键帧中的地图点添加这个关键帧对地图点的观测关系，然后更新这个地图点的观测方向、平均深度等信息
+            //; 最后把这个关键帧加入到共视图中，更新这个关键帧的共视图链接关系（相当于初始化这个关键帧的自己的共视关系）
             ProcessNewKeyFrame();
 
+            //; 下面Step 3 和 4的顺序有点奇怪，因为3中剔除的点实际是4中生成的新的地图点，也就是本次生成的点会在下一次再被剔除
+            //; 
             // Check recent MapPoints
             // Step 3 根据地图点的观测情况剔除质量不好的地图点
             MapPointCulling();
@@ -100,7 +104,9 @@ void LocalMapping::Run()
             // 不就不会执行culling了吗？只有下一次调用局部见图线程的时候才会执行啊
 
             // 已经处理完队列中的最后的一个关键帧
-            if(!CheckNewKeyFrames())
+            //; 这里全部处理完队列中新插入的关键帧才去融合当前关键帧和相邻关键帧的地图点，
+            //; 那么中间的那些新插入的关键帧地图点不就是没有被融合吗？
+            if(!CheckNewKeyFrames())  
             {
                 // Find more matches in neighbor keyframes and fuse point duplications
                 //  Step 5 检查并融合当前关键帧与相邻关键帧帧（两级相邻）中重复的地图点
@@ -118,12 +124,13 @@ void LocalMapping::Run()
                 //; 局部地图关键帧个数不能太少
                 if(mpMap->KeyFramesInMap()>2)
                     // 注意这里的第二个参数是按地址传递的,当这里的 mbAbortBA 状态发生变化时，能够及时执行/停止BA
-                    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);
+                    Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);  // 局部BA
 
                 // Check redundant local Keyframes
                 // Step 7 检测并剔除当前帧相邻的关键帧中冗余的关键帧
                 // 冗余的判定：该关键帧的90%的地图点可以被其它关键帧观测到
-                KeyFrameCulling();
+                //; 注意这个函数判定是冗余关键帧之后，然后设置这个关键帧的BadFlag
+                KeyFrameCulling();   
             }
 
             // Step 8 将当前帧加入到闭环检测队列中
@@ -152,7 +159,7 @@ void LocalMapping::Run()
 
         // 如果当前线程已经结束了就跳出主循环
         if(CheckFinish())
-            break;
+            break;          //; 注意这里是跳出最外面while()的循环
 
         //usleep(3000);
         std::this_thread::sleep_for(std::chrono::milliseconds(3));
@@ -168,7 +175,7 @@ void LocalMapping::InsertKeyFrame(KeyFrame *pKF)
 {
     unique_lock<mutex> lock(mMutexNewKFs);
     // 将关键帧插入到列表中
-    mlNewKeyFrames.push_back(pKF);
+    mlNewKeyFrames.push_back(pKF);   //; 注意这里是插入到等待处理的关键帧列表中
     mbAbortBA=true;
 }
 
@@ -190,6 +197,7 @@ void LocalMapping::ProcessNewKeyFrame()
     {
         unique_lock<mutex> lock(mMutexNewKFs);
         // 取出列表中最前面的关键帧，作为当前要处理的关键帧
+        //; 成员变量，当前正在处理的关键帧
         mpCurrentKeyFrame = mlNewKeyFrames.front();
         // 取出最前面的关键帧后，在原来的列表里删掉该关键帧
         mlNewKeyFrames.pop_front();
@@ -197,6 +205,7 @@ void LocalMapping::ProcessNewKeyFrame()
 
     // Compute Bags of Words structures
     // Step 2：计算该关键帧特征点的词袋向量
+    //; 这个函数里并不一定会直接计算，而是会判断是否已经有了词袋向量，因为关键帧是从普通帧来的，普通帧中可能计算过词袋
     mpCurrentKeyFrame->ComputeBoW();
 
     // Associate MapPoints to the new keyframe and update normal and descriptor
@@ -211,15 +220,18 @@ void LocalMapping::ProcessNewKeyFrame()
         {
             if(!pMP->isBad())
             {
+                //; 如果这个地图点没有添加被当前关键帧观测到的信息。其实我感觉这里说的是废话，你现在处理的都是新插入的关键帧，也就是前面新
+                //; 生成的关键帧，怎么可能添加过对这个地图点的观测关系？
                 if(!pMP->IsInKeyFrame(mpCurrentKeyFrame))  // 如果这个地图点没有被新插入的这个关键帧观测到
                 {
                     // 如果地图点不是来自当前帧的观测（比如来自局部地图点），为当前地图点添加观测
-                    pMP->AddObservation(mpCurrentKeyFrame, i);
-                    // 获得该点的平均观测方向和观测距离范围
+                    pMP->AddObservation(mpCurrentKeyFrame, i);   // i是这个地图点在关键帧中的2D特征点索引
+                    //; 因为当前这个新的关键帧看到了这个地图点，所以要更新这个地图点的平均观测方向和观测距离范围
                     pMP->UpdateNormalAndDepth();
-                    // 更新地图点的最佳描述子
+                    //; 同理，因为有新的关键帧看到了这个地图点，所以要更新地图点的最佳描述子
                     pMP->ComputeDistinctiveDescriptors();
                 }
+                //; 注意看下面的注释，原作者说了这这种情况只在双目的时候发生，所以上面的那个判断就是为了区分单双目
                 else // this can only happen for new stereo points inserted by the Tracking
                 {
                     // 如果当前帧中已经包含了这个地图点,但是这个地图点中却没有包含这个关键帧的信息
@@ -233,6 +245,8 @@ void LocalMapping::ProcessNewKeyFrame()
 
     // Update links in the Covisibility Graph
     // Step 4：更新关键帧间的连接关系（共视图）
+    //; 因为新增加了一个关键帧，就需要建立它和已有的关键帧的链接关系，方法很简单：
+    //; 就是遍历这个关键帧的所有地图点，查找也观测到这个地图点的其他关键帧，最后统计共同观测的地图点的数目，就可以得到共视图的权重。
     mpCurrentKeyFrame->UpdateConnections();
 
     // Insert Keyframe in Map
@@ -248,7 +262,7 @@ void LocalMapping::MapPointCulling()
 {
     // Check Recent Added MapPoints
     list<MapPoint*>::iterator lit = mlpRecentAddedMapPoints.begin();
-    const unsigned long int nCurrentKFid = mpCurrentKeyFrame->mnId;
+    const unsigned long int nCurrentKFid = mpCurrentKeyFrame->mnId;  //; 最新插入的关键帧ID
 
     // Step 1：根据相机类型设置不同的观测阈值
     int nThObs;
@@ -267,6 +281,7 @@ void LocalMapping::MapPointCulling()
             // Step 2.1：已经是坏点的地图点仅从队列中删除
             lit = mlpRecentAddedMapPoints.erase(lit);
         }
+        //; 这个地图点  被普通帧看到并且匹配上的次数 / 在普通帧的视野里的次数  <  0.25f
         else if(pMP->GetFoundRatio()<0.25f)
         {
             // Step 2.2：跟踪到该地图点的帧数相比预计可观测到该地图点的帧数的比例小于25%，从地图中删除
@@ -277,10 +292,14 @@ void LocalMapping::MapPointCulling()
             pMP->SetBadFlag();
             lit = mlpRecentAddedMapPoints.erase(lit);
         }
+        // mnFirstKFid是在生成地图点的时候的关键帧的Id
         else if(((int)nCurrentKFid-(int)pMP->mnFirstKFid)>=2 && pMP->Observations()<=cnThObs)
         {
             // Step 2.3：从该点建立开始，到现在已经过了不小于2个关键帧
-            // 但是观测到该点的相机数却不超过阈值cnThObs，从地图中删除
+            // 但是观测到该点的关键帧却不超过阈值cnThObs，从地图中删除
+            //; 注意这里的地图点是两个共视关键帧三角化恢复出来的，所以恢复完之后它的最初的Obs关键帧观测次数就是2，也就是cnThObs，
+            //; 然后这里判断如果从最初生成这个地图点到现在，如果已经过去大于两个关键帧了，没有任何新的一帧看到这个地图点，
+            //; 说明恢复出来的这个地图点特性不太好
             pMP->SetBadFlag();
             lit = mlpRecentAddedMapPoints.erase(lit);
         }
@@ -342,7 +361,9 @@ void LocalMapping::CreateNewMapPoints()
     {
         // ! 疑似bug，正确应该是 if(i>0 && !CheckNewKeyFrames())
         //; 确实，不知道这里在判断什么？i>0是什么条件？
-        if(i>0 && CheckNewKeyFrames())
+        //; 如果还有新插入的关键帧没有处理，那么就别恢复地图点了，赶紧去处理下一帧？
+        //; 没看懂？？？这到底在判断什么？？考虑因素是什么？
+        if(i>0 && CheckNewKeyFrames())  
             return;
 
         KeyFrame* pKF2 = vpNeighKFs[i];
@@ -415,13 +436,13 @@ void LocalMapping::CreateNewMapPoints()
             const cv::KeyPoint &kp1 = mpCurrentKeyFrame->mvKeysUn[idx1];
             // mvuRight中存放着双目的深度值，如果不是双目，其值将为-1
             const float kp1_ur=mpCurrentKeyFrame->mvuRight[idx1];
-            bool bStereo1 = kp1_ur>=0;
+            bool bStereo1 = kp1_ur>=0;  //; 单目是false
 
             // 当前匹配在邻接关键帧中的特征点
             const cv::KeyPoint &kp2 = pKF2->mvKeysUn[idx2];
             // mvuRight中存放着双目的深度值，如果不是双目，其值将为-1
             const float kp2_ur = pKF2->mvuRight[idx2];
-            bool bStereo2 = kp2_ur>=0;
+            bool bStereo2 = kp2_ur>=0;  //; 单目是false
 
             // Check parallax between rays
             // Step 6.2：利用匹配点反投影得到视差角
@@ -435,6 +456,7 @@ void LocalMapping::CreateNewMapPoints()
             // 匹配点射线夹角余弦值
             const float cosParallaxRays = ray1.dot(ray2)/(cv::norm(ray1)*cv::norm(ray2));
 
+            //; 下面这个三个变量对于单目来说都没有用
             // 加1是为了让cosParallaxStereo随便初始化为一个很大的值
             float cosParallaxStereo = cosParallaxRays+1;  
             // cosParallaxStereo1、cosParallaxStereo2在后面可能不存在，需要初始化为较大的值
@@ -446,7 +468,7 @@ void LocalMapping::CreateNewMapPoints()
                 // 传感器是双目相机,并且当前的关键帧的这个点有对应的深度
                 // 假设是平行的双目相机，计算出双目相机观察这个点的时候的视差角余弦
                 cosParallaxStereo1 = cos(2*atan2(mpCurrentKeyFrame->mb/2,mpCurrentKeyFrame->mvDepth[idx1]));
-            else if(bStereo2)
+            else if(bStereo2)  //; 这里用elif也不太对吧？肯定这俩同时是true或者false吧？
                 // 传感器是双目相机,并且邻接的关键帧的这个点有对应的深度，和上面一样操作
                 cosParallaxStereo2 = cos(2*atan2(pKF2->mb/2,pKF2->mvDepth[idx2]));
             
@@ -459,6 +481,7 @@ void LocalMapping::CreateNewMapPoints()
             // cosParallaxRays < cosParallaxStereo 表明匹配点对夹角大于双目本身观察三维点夹角
             // 匹配点对夹角大，用三角法恢复3D点
             // 参考：https://github.com/raulmur/ORB_SLAM2/issues/345
+            //; 对于单目来说，有效的判断就是最后一个，也就是相机光心指向3D点的向量之间的夹角>1度。  ？？？ 1度是不是太小了？？
             if(cosParallaxRays<cosParallaxStereo && cosParallaxRays>0 && (bStereo1 || bStereo2 || cosParallaxRays<0.9998))
             {
                 // Linear Triangulation Method
@@ -489,6 +512,7 @@ void LocalMapping::CreateNewMapPoints()
             {
                 x3D = pKF2->UnprojectStereo(idx2);
             }
+            //; 对于单目来说，如果两个向量的角度太小了，那么认为恢复出来的3D点的坐标不准确，直接放弃这个点
             else
                 continue; //No stereo and very low parallax, 放弃
 
@@ -512,6 +536,7 @@ void LocalMapping::CreateNewMapPoints()
             const float y1 = Rcw1.row(1).dot(x3Dt)+tcw1.at<float>(1);
             const float invz1 = 1.0/z1;
 
+            //; 单目情况
             if(!bStereo1)
             {
                 // 单目情况下
@@ -579,6 +604,8 @@ void LocalMapping::CreateNewMapPoints()
                 continue;
 
             // ratioDist是不考虑金字塔尺度下的距离比例
+            //; 距离越远，那么金字塔层数越低。假设dist2更大，那么他所在的金字塔缩放系数就小。假设dist2/dist1 = 1.2/1, 
+            //; 那么层数缩放系数比应该大致满足 1/1.2
             const float ratioDist = dist2/dist1;
             // 金字塔尺度因子的比例
             const float ratioOctave = mpCurrentKeyFrame->mvScaleFactors[kp1.octave]/pKF2->mvScaleFactors[kp2.octave];
@@ -587,11 +614,13 @@ void LocalMapping::CreateNewMapPoints()
                 continue;*/
 
             // 距离的比例和图像金字塔的比例不应该差太多，否则就跳过
+            //; ratioFactor = 1.5 * factor = 1.5 * 1.2
             if(ratioDist*ratioFactor<ratioOctave || ratioDist>ratioOctave*ratioFactor)
                 continue;
 
             // Triangulation is succesfull
             // Step 6.8：三角化生成3D点成功，构造成MapPoint
+            //; 注意地图点的RedKF就是生成它的那个关键帧
             MapPoint* pMP = new MapPoint(x3D,mpCurrentKeyFrame,mpMap);
 
             // Step 6.9：为该MapPoint添加属性：
@@ -599,6 +628,7 @@ void LocalMapping::CreateNewMapPoints()
             pMP->AddObservation(mpCurrentKeyFrame,idx1);            
             pMP->AddObservation(pKF2,idx2);
 
+            //; 从这里可以看出来，新生成的这些地图点只是被关键帧观测到，目前还没有被普通帧观测到
             mpCurrentKeyFrame->AddMapPoint(pMP,idx1);
             pKF2->AddMapPoint(pMP,idx2);
 
