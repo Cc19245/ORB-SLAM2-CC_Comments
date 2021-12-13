@@ -244,10 +244,12 @@ public:
     float mTrackViewCos;           ///< 被追踪到时,那帧相机看到当前地图点的视角
     // TrackLocalMap - SearchByProjection 中决定是否对该点进行投影的变量
     // NOTICE mbTrackInView==false的点有几种：
-    // a 已经和当前帧经过匹配（TrackReferenceKeyFrame，TrackWithMotionModel）但在优化过程中认为是外点
-    // b 已经和当前帧经过匹配且为内点，这类点也不需要再进行投影   //? 为什么已经是内点了之后就不需要再进行投影了呢? 
-    // c 不在当前相机视野中的点（即未通过isInFrustum判断）     //? 
-    bool mbTrackInView;
+    // a 已经和当前帧经过匹配（TrackReferenceKeyFrame，TrackWithMotionModel）但在优化过程中认为是外点 
+    //; a这条的话我感觉算是一个bug，因为优化后认为是外点的话，就把地图点删除了，所以后面判断投影的时候都要先判断地图点是否存在，然后再看是否要进行投影匹配
+    //; 所以在这里看mbTrackInView这个变量对于外点来说有一些多余了
+    // b 已经和当前帧经过匹配且为内点，这类点也不需要再进行投影     //; 正确，因为是为了要找新的匹配
+    // c 不在当前相机视野中的点（即未通过isInFrustum的判断）     //; 很明显
+    bool mbTrackInView;  //; 如果是true，那么在局部地图跟踪投影的时候，就投影这些点进行SearchByProjection的匹配
     // TrackLocalMap - UpdateLocalPoints 中防止将MapPoints重复添加至mvpLocalMapPoints的标记
     long unsigned int mnTrackReferenceForFrame;
 

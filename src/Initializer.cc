@@ -140,7 +140,7 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     // Step 2 在所有匹配特征点对中随机选择8对匹配特征点为一组，用于估计H矩阵和F矩阵
     // 共选择 mMaxIterations (默认200) 组   
     //? 这样的话不就要保证初始化的时候至少有200*8 对特征点能够配对上吗？否则RANSAC找随机的点对找不到啊？
-    //; 自答：不是！因为迭代的200次选8对匹配点，其实每次迭代选择都是在整个的匹配关系中选择的
+    //; 自答：不是！因为迭代的200次选8对匹配点，其实每次迭代选择都是在整个的匹配关系中选择的，相当于这是一个有放回的取值问题
     //mvSets用于保存每次迭代时所使用的向量
     //; mvSets最外层存储的是mMaxIterations个元素，每个元素初始化成了vector<size_t>(8,0)，也就是一个8维的向量，初始值都是0
     mvSets = vector< vector<size_t> >(mMaxIterations,		//最大的RANSAC迭代次数
@@ -706,6 +706,7 @@ float Initializer::CheckHomography(
             bIn = false;    
         else
             // 误差越大，得分越低
+            //; 这个还是有道理的，因为外点直接就不加分，只要是内点就加分，所以一个匹配即使内点的误差都比较大，但是还是会累加得分的
             score += th - chiSquare1;       // th是卡方分布得到的数值，5.991
 
         // 计算从img1 到 img2 的投影变换误差
@@ -1647,6 +1648,8 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
         //; 注意这里就是&&，原因原作者的注释已经说了，因为无限远的点很容易得到一个负深度，所以这里只判断具有足够的视差的点并且深度还是负数的时候，才是非法的点。
         //; 很容易直到，当一个点是无限远的时候，对于两个相机来说，他们的视差肯定很小（因为此时点到两个相机的向量几乎是平行的了），所以视差比较大就限定了3D点的
         //; 深度不是特别特别大
+
+        //; 注意对于视差很小（也就是深度无穷大）的点，已经在上面判断坐标是否是无穷大的时候排除掉了
             continue;
 
         // Check depth in front of second camera (only if enough parallax, as "infinite" points can easily go to negative depth)
@@ -1712,6 +1715,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
         // !排序后并没有取最小的视差角，而是取一个较小的视差角
 		// 作者的做法：如果经过检验过后的有效3D点小于50个，那么就取最后那个最小的视差角(cos值最大)
 		// 如果大于50个，就取排名第50个的较小的视差角即可，为了避免3D点太多时出现太小的视差角 
+        //; 问题：没看懂为什么要这么做，大概是要选择一个中值的视差角？
         size_t idx = min(50,int(vCosParallax.size()-1));
 
 		//将这个选中的角弧度制转换为角度制

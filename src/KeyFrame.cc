@@ -483,7 +483,7 @@ void KeyFrame::UpdateConnections()
         if(mit->second>=th)
         {
             // 对应权重需要大于阈值，对这些关键帧建立连接
-            vPairs.push_back(make_pair(mit->second,mit->first));
+            vPairs.push_back(make_pair(mit->second,mit->first));  //; pair(权重，共视关键帧)
             // 对方关键帧也要添加这个信息
             // 更新KFcounter中该关键帧的mConnectedKeyFrameWeights
             //; 更新其它KeyFrame的mConnectedKeyFrameWeights，更新其它关键帧与当前帧的连接权重
@@ -521,12 +521,13 @@ void KeyFrame::UpdateConnections()
         // mspConnectedKeyFrames = spConnectedKeyFrames;
         // 更新当前帧与其它关键帧的连接权重
         //; 注意这里才更新当前帧和其他帧的连接关系！
-        mConnectedKeyFrameWeights = KFcounter;
+        mConnectedKeyFrameWeights = KFcounter;   //; 这里直接一步更新了当前帧和其他共视帧的连接关系
         mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
         mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 
         // Step 5 更新生成树的连接
         //; mbFirstConnection 指示当前关键帧是否第一次加入生成树中，默认为true。所以一般情况下这个if判断总是成立的
+        //; 注意这里初始化的那帧的mnId = 0,所以说前两帧中，从第0帧开始，他是第1帧的父亲，所以会把第1帧加入到生成树中
         if(mbFirstConnection && mnId!=0)
         {
             // 初始化该关键帧的父关键帧为共视程度最高的那个关键帧

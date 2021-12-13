@@ -129,6 +129,7 @@ int ORBmatcher::SearchByProjection(Frame &F, const vector<MapPoint*> &vpMapPoint
 
             // 如果Frame中的该兴趣点已经有对应的MapPoint了,则退出该次循环
             if(F.mvpMapPoints[idx])
+                //; ！为什么总要判断这个mnObs观测次数呢？
                 if(F.mvpMapPoints[idx]->Observations()>0)
                     continue;
 
@@ -260,10 +261,15 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
     const vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
 
     // 和普通帧F特征点的索引一致
-    vpMapPointMatches = vector<MapPoint*>(F.N, static_cast<MapPoint*>(NULL));  // 这种写法是什么意思，重新设置了大小吗？
+    //; 这种写法是什么意思，重新设置了大小吗？
+    //; CC: 这就是赋初值的意思，就相当于同时定义了这个vector的长度和默认的元素值，和数组一样。但是注意vector的长度是可以变的，这里的长度相当于预留了一个长度
+    vpMapPointMatches = vector<MapPoint*>(F.N, static_cast<MapPoint*>(NULL));  
 
     // 取出关键帧的词袋特征向量
-    const DBoW2::FeatureVector &vFeatVecKF = pKF->mFeatVec; // 特征向量是一个map，键是这帧图像的特征点归类的word在哪个node下，值是这个node下还有哪些特征点
+    //; FeatureVector是一个map，键是这帧图像的特征点归类的word在哪个node下，值是这个node下还有哪些特征点
+    //; 具体操作是：在计算词袋向量的时候，把所有特征点归类到某一层的node下，然后比如一共归类到1 2 3 三个node下，最后把所有的单词都归到这三个node下，
+    //; 那么就能得到在node 1 2 3 下的特征点分别是哪些，从而加速后面的匹配
+    const DBoW2::FeatureVector &vFeatVecKF = pKF->mFeatVec; 
 
     int nmatches=0;
 
