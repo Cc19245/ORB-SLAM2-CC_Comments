@@ -779,6 +779,8 @@ void Tracking::Track()
     {
         // 计算相对姿态Tcr = Tcw * Twr, Twr = Trw^-1
         // 计算当前帧相对于当前帧的参考关键帧的位姿
+        //; 计算当前帧和它的RefKF之间的相对位姿关系，因为这是一个局部的位姿关系是相对比较准确的，而LocalMapping中会更新关键帧的位姿，
+        //; 所以最后在TrackWithMotionModel的时候先更新上一帧的位姿（因为关键帧的位姿可能被更新了）
         cv::Mat Tcr = mCurrentFrame.mTcw*mCurrentFrame.mpReferenceKF->GetPoseInverse();
         //保存各种状态
         mlRelativeFramePoses.push_back(Tcr);    // 存储当前帧相对当前帧的参考关键帧的位姿
