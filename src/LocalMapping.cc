@@ -100,6 +100,8 @@ void LocalMapping::Run()
 
             // Triangulate new MapPoints
             // Step 4 当前关键帧与相邻关键帧通过三角化产生新的地图点，使得跟踪更稳
+            //; 通过词典匹配当前帧和其共视关键帧之间的特征点，使用极线约束来剔除外点（注意极线约束是作为筛选条件的，而不是用来搜索的）
+            //; 对匹配后的点进行双向投影得到误差，进一步进行筛选
             CreateNewMapPoints();  // 目前来看，是当前帧生成的地图点，到下一帧在生成地图点的时候再culling，那最后那一帧生成的地图点
             // 不就不会执行culling了吗？只有下一次调用局部见图线程的时候才会执行啊
 
@@ -124,6 +126,8 @@ void LocalMapping::Run()
                 //; 局部地图关键帧个数不能太少
                 if(mpMap->KeyFramesInMap()>2)
                     // 注意这里的第二个参数是按地址传递的,当这里的 mbAbortBA 状态发生变化时，能够及时执行/停止BA
+                    //; 把当前帧的一级共视关键帧和他们的地图点作为g2o优化的顶点，加入g2o优化，同时优化地图点和位姿。
+                    //; 此外，会把当前帧的二级共视关键帧也加入到g2o中，但是不优化这些帧的位姿，只是作为一个约束
                     Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);  // 局部BA
 
                 // Check redundant local Keyframes
@@ -402,7 +406,17 @@ void LocalMapping::CreateNewMapPoints()
 
         // Search matches that fullfil epipolar constraint
         // Step 5：通过词袋对两关键帧的未匹配的特征点快速匹配，用极线约束抑制离群点，生成新的匹配点对
+        //; 注意这里，还是使用词袋进行特征点的匹配，而极线约束只是被用于筛选外点。如果使用极线约束进行匹配，也就是极线搜索的话，
+        //; 那这样匹配的工作量太大，速度就太慢了
         vector<pair<size_t,size_t> > vMatchedIndices;
+        //; 同时注意这里进行匹配的是两个帧中都没有对应的地图点的哪些特征点，只要其中一帧的特征点有地图点，那么就不匹配它了。
+        //; 我感觉这里有道理也没有道理: 
+        //; 1.说他有道理是因为这个函数寻找匹配是为了后面三角化生成新的地图点，所以如果某一帧已经有了匹配的
+        //;   地图点了的话，那么后面就不能再用它的匹配三角化生成新的地图点了。
+        //; 2.说他没道理的话是因为这里实际上漏了一些匹配关系，因为追踪得到的当前关键帧的地图点如果是匀速跟踪的话都是从上一帧
+        //;   的地图点中得到的，属于当前帧和上一帧的共视部分。那么很可能有一部分点是当前帧和当前帧的共视关键帧可以看到的，但是却
+        //;   不是上一帧能看到的，所以当前帧天然的就和这部分共视关键帧的某些地图点有匹配关系，也就是地图点的观测关系，但是
+        //;   但是这个关系却没有被添加上。估计是因为这个工作量太大了吧
         matcher.SearchForTriangulation(mpCurrentKeyFrame,pKF2,F12,vMatchedIndices,false);
 
         cv::Mat Rcw2 = pKF2->GetRotation();
@@ -447,6 +461,7 @@ void LocalMapping::CreateNewMapPoints()
             // Check parallax between rays
             // Step 6.2：利用匹配点反投影得到视差角
             // 特征点反投影,其实得到的是在各自相机坐标系下的一个非归一化的方向向量,和这个点的反投影射线重合
+            //; 因为此时有相机的位姿，所以可以把得到这个特征点的方向向量
             cv::Mat xn1 = (cv::Mat_<float>(3,1) << (kp1.pt.x-cx1)*invfx1, (kp1.pt.y-cy1)*invfy1, 1.0);
             cv::Mat xn2 = (cv::Mat_<float>(3,1) << (kp2.pt.x-cx2)*invfx2, (kp2.pt.y-cy2)*invfy2, 1.0);
 
@@ -620,7 +635,7 @@ void LocalMapping::CreateNewMapPoints()
 
             // Triangulation is succesfull
             // Step 6.8：三角化生成3D点成功，构造成MapPoint
-            //; 注意地图点的RedKF就是生成它的那个关键帧
+            //; 注意地图点的RedKF就是生成它的那个关键帧，也就是处理的当前关键帧
             MapPoint* pMP = new MapPoint(x3D,mpCurrentKeyFrame,mpMap);
 
             // Step 6.9：为该MapPoint添加属性：
@@ -629,6 +644,7 @@ void LocalMapping::CreateNewMapPoints()
             pMP->AddObservation(pKF2,idx2);
 
             //; 从这里可以看出来，新生成的这些地图点只是被关键帧观测到，目前还没有被普通帧观测到
+            //; 注意：nObs是只有关键帧才能修改的，这个可以翻译为观测。其他的要翻译成找到（found）和可见（visible）
             mpCurrentKeyFrame->AddMapPoint(pMP,idx1);
             pKF2->AddMapPoint(pMP,idx2);
 
@@ -703,6 +719,19 @@ void LocalMapping::SearchInNeighbors()
     ORBmatcher matcher;
 
     // Step 3：将当前帧的地图点分别投影到两级相邻关键帧，寻找匹配点对应的地图点进行融合，称为正向投影融合
+    //; 这里的融合是有道理的。因为如果没有局部建图这种操作的话，那么所有帧的地图点都属于初始化的地图点的一部分，所以就不存在融合的说法。
+    //; 但是因为实际上局部建图中最重要的一个操作就是三角化产生新的地图点，所以新生成的地图点可能会和之前关键帧中有的地图点很相近。
+    //; 问题：这里是把所有的地图点都进行融合了，只融合上面三角化新生成的地图点不行吗？
+    //; 按照目前作者的这种写法是不行的，我感觉总体的原因是作者的这个写法有bug？还是说作者出于效率考虑？
+    //; 因为当前帧新三角化的地图点肯定要融合，当前帧跟踪时得到的地图点是来自上一帧的（匀速模型跟踪的话），那上一帧的地图点又来自哪里？
+    //; 上一帧的地图点来自上上帧......再往前追溯一定可以找到最近的那个关键帧，所以当前帧的地图点有一部分是属于上一帧的地图点的，此外
+    //; 还有一部分是在TrackLocalMap的时候当前帧的共视关键帧的。按照作者当前的做法，所有新插入到LocalMapping中的关键帧，是处理完毕
+    //; 后才进行一次地图融合，所以当前帧的这些共视关键帧新生成的地图点可能没有经过融合，那么这些点中又有一部分作为当前帧追踪时的地图点,
+    //; 所以这部分地图点也是需要融合的。所以说感觉作者的这种写法有些混乱，可能是为了效率考虑？因为实际上不论你怎么融合，都会有遗漏的地图点
+    //; 没有融合到，除非你遍历所有的关键帧。
+
+    //; 我认为如果不存在效率问题的话，对插入到每个LocalMappping中的关键帧，在三角化生成地图点之后，接着就进行一次对新生成的地图点
+    //; 的融合。
     vector<MapPoint*> vpMapPointMatches = mpCurrentKeyFrame->GetMapPointMatches();
     for(vector<KeyFrame*>::iterator vit=vpTargetKFs.begin(), vend=vpTargetKFs.end(); vit!=vend; vit++)
     {
@@ -717,6 +746,7 @@ void LocalMapping::SearchInNeighbors()
 
     // Search matches by projection from target KFs in current KF
     // Step 4：将两级相邻关键帧地图点分别投影到当前关键帧，寻找匹配点对应的地图点进行融合，称为反向投影融合
+    //; 离谱，这得有多少地图点啊！
     // 用于进行存储要融合的一级邻接和二级邻接关键帧所有MapPoints的集合
     vector<MapPoint*> vpFuseCandidates;
     vpFuseCandidates.reserve(vpTargetKFs.size()*vpMapPointMatches.size());

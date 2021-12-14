@@ -182,7 +182,7 @@ void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph)
             // Covisibility Graph (共视图)
             // step 3.1 共视程度比较高的共视关键帧用线连接
             //遍历每一个关键帧，得到它们共视程度比较高的关键帧
-            const vector<KeyFrame*> vCovKFs = vpKFs[i]->GetCovisiblesByWeight(100);
+            const vector<KeyFrame*> vCovKFs = vpKFs[i]->GetCovisiblesByWeight(100);  //; 权重超过100的关键帧
             //遍历每一个关键帧，得到它在世界坐标系下的相机坐标
             cv::Mat Ow = vpKFs[i]->GetCameraCenter();
             if(!vCovKFs.empty())
@@ -190,7 +190,7 @@ void MapDrawer::DrawKeyFrames(const bool bDrawKF, const bool bDrawGraph)
                 for(vector<KeyFrame*>::const_iterator vit=vCovKFs.begin(), vend=vCovKFs.end(); vit!=vend; vit++)
                 {
                     //单向绘制
-                    if((*vit)->mnId<vpKFs[i]->mnId)
+                    if((*vit)->mnId < vpKFs[i]->mnId)   //; vpKF是每一个关键帧
                         continue;
                     cv::Mat Ow2 = (*vit)->GetCameraCenter();
                     glVertex3f(Ow.at<float>(0),Ow.at<float>(1),Ow.at<float>(2));

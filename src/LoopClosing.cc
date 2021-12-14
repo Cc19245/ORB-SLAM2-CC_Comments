@@ -679,6 +679,7 @@ void LoopClosing::CorrectLoop()
     // Ensure current keyframe is updated
     // Step 1：根据共视关系更新当前关键帧与其它关键帧之间的连接关系
     // 因为之前闭环检测、计算Sim3中改变了该关键帧的地图点，所以需要更新
+    //; 主要是在前面闭环检测和计算sim3的时候建立了当前帧和闭环帧的地图点之间的观测关系
     mpCurrentKF->UpdateConnections();
 
     // Retrive keyframes connected to the current keyframe and compute corrected Sim3 pose by propagation
@@ -786,6 +787,7 @@ void LoopClosing::CorrectLoop()
             // Step 2.3：将共视关键帧的Sim3转换为SE3，根据更新的Sim3，更新关键帧的位姿
             // 其实是现在已经有了更新后的关键帧组中关键帧的位姿,但是在上面的操作时只是暂时存储到了 KeyFrameAndPose 类型的变量中,还没有写回到关键帧对象中
             // 调用toRotationMatrix 可以自动归一化旋转矩阵
+            //; 注意toRotationMatrix可以自动归一化旋转矩阵，所以就相当于把sR变成了R
             Eigen::Matrix3d eigR = g2oCorrectedSiw.rotation().toRotationMatrix(); 
             Eigen::Vector3d eigt = g2oCorrectedSiw.translation();                  
             double s = g2oCorrectedSiw.scale();

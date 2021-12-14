@@ -492,6 +492,11 @@ int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapP
         （2）计算3D地图点到当前相机的向量，计算向量长度得到3D点离相机的距离，这个距离要在 “创建这个3D地图点时预测出来的能够在金字塔中检测到这个3D点
             对应的特征点的距离范围” 之内。那么选择那种方式计算出来的Ow作为相机中心在世界坐标系下的坐标呢？
     */
+    /*
+    //; 首先明确闭环候选帧及其共视关键帧的地图点是准确的，相对于世界坐标系是准确的
+    //; 而当前帧的位姿和当前帧的地图点的坐标都是不准确的，因为有尺度漂移。
+    //; 所以如果我想把闭环候选帧的地图点投影到当前帧中进行投影匹配，那么我该用的是当前帧的sim3变换，这样才是正确的。
+    */
     cv::Mat sRcw = Scw.rowRange(0,3).colRange(0,3);
     const float scw = sqrt(sRcw.row(0).dot(sRcw.row(0)));   // 计算得到尺度s
     cv::Mat Rcw = sRcw/scw;                                 // 保证旋转矩阵行列式为1

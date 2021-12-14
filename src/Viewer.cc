@@ -99,21 +99,24 @@ void Viewer::Run()
     pangolin::Var<bool> menuLocalizationMode("menu.Localization Mode",false,true);
     pangolin::Var<bool> menuReset("menu.Reset",false,false);
 
-    // Define Camera Render Object (for view / scene browsing)
+
+    // Define Camera Render Object (for view / scene browsing)  定义相机渲染对象（用于视图/场景浏览）
     // 定义相机投影模型：ProjectionMatrix(w, h, fu, fv, u0, v0, zNear, zFar)
     // 定义观测方位向量：观测点位置：(mViewpointX mViewpointY mViewpointZ)
     //                观测目标位置：(0, 0, 0)
     //                观测的方位向量：(0.0,-1.0, 0.0)
+    //; s_cam: select cam, 左侧显示的勾选框的面板
     pangolin::OpenGlRenderState s_cam(
                 pangolin::ProjectionMatrix(1024,768,mViewpointF,mViewpointF,512,389,0.1,1000),
                 pangolin::ModelViewLookAt(mViewpointX,mViewpointY,mViewpointZ, 0,0,0,0.0,-1.0, 0.0)
                 );
 
     // Add named OpenGL viewport to window and provide 3D Handler
-    // 定义显示面板大小，orbslam中有左右两个面板，昨天显示一些按钮，右边显示图形
+    // 定义显示面板大小，orbslam中有左右两个面板，昨边显示一些按钮，右边显示图形
     // 前两个参数（0.0, 1.0）表明宽度和面板纵向宽度和窗口大小相同
     // 中间两个参数（pangolin::Attach::Pix(175), 1.0）表明右边所有部分用于显示图形
     // 最后一个参数（-1024.0f/768.0f）为显示长宽比
+    //; d_cam: display cam, 右侧显示的地图点和关键帧的面板
     pangolin::View& d_cam = pangolin::CreateDisplay()
             .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
             .SetHandler(new pangolin::Handler3D(s_cam));
@@ -123,11 +126,11 @@ void Viewer::Run()
     Twc.SetIdentity();
 
     //创建当前帧图像查看器,谢晓佳在泡泡机器人的第35课中讲过这个;需要先声明窗口,再创建;否则就容易出现窗口无法刷新的情况
-    cv::namedWindow("ORB-SLAM2: Current Frame");
+    cv::namedWindow("ORB-SLAM2: Current Frame");  //; 右侧显示图像画面
 
     //ui设置
-    bool bFollow = true;
-    bool bLocalizationMode = false;
+    bool bFollow = true;   //; Follow Camera 按键的默认状态
+    bool bLocalizationMode = false;  //; Localization Mode 按键的默认状态
 
     //更新绘制的内容
     while(1)
@@ -140,11 +143,14 @@ void Viewer::Run()
 
         // step2：根据相机的位姿调整视角
         // menuFollowCamera为按钮的状态，bFollow为真实的状态
-        if(menuFollowCamera && bFollow)
+        //; menuFollowCamera判断的是复选框现在的状态，bFollow是上一次的状态，还没来得及更改
+        //; 这里就是说复选框现在是true, bFollow也就是上一次也是true，说明用户没有更改Follow的模式，那么就使用Follow显示
+        if(menuFollowCamera && bFollow) 
         {
             //当之前也在跟踪相机时
             s_cam.Follow(Twc);
         }
+        //; 反之如果bFollow=false也就是之前不是follow camera的状态，而现在用户打钩选择了follow的状态，那么就更改一下模式
         else if(menuFollowCamera && !bFollow)
         {
             //当之前没有在跟踪相机时
@@ -153,6 +159,7 @@ void Viewer::Run()
             s_cam.Follow(Twc);
             bFollow = true;
         }
+        //; 之前Follow camera，但是现在用户选择不要跟踪相机了
         else if(!menuFollowCamera && bFollow)
         {
             //之前跟踪相机,但是现在菜单命令不要跟踪相机时
@@ -160,37 +167,48 @@ void Viewer::Run()
         }
 
         //更新定位模式或者是SLAM模式
+        //; 之前是slam模式，现在用户更改为纯定位模式，那么就给system发信号
         if(menuLocalizationMode && !bLocalizationMode)
         {
             mpSystem->ActivateLocalizationMode();
             bLocalizationMode = true;
         }
+        //; 以前是纯定位模式，现在用户更改为slam模式，那么就给system发信号
         else if(!menuLocalizationMode && bLocalizationMode)
         {
             mpSystem->DeactivateLocalizationMode();
             bLocalizationMode = false;
         }
 
+        //; 右侧的地图和关键帧的显示状态根据左侧的复选框勾选结果进行显示设置
         d_cam.Activate(s_cam);
+
         // step 3：绘制地图和图像(3D部分)
         // 设置为白色，glClearColor(red, green, blue, alpha），数值范围(0, 1)
-        glClearColor(1.0f,1.0f,1.0f,1.0f);
+        // glClearColor(1.0f,1.0f,1.0f,1.0f);   //; 这个是设置右侧面板显示的背景色？
+
         //绘制当前相机
-        mpMapDrawer->DrawCurrentCamera(Twc);
+        mpMapDrawer->DrawCurrentCamera(Twc);  //; 绿色是当前帧
         //绘制关键帧和共视图
+        //; 蓝色是关键帧，共视图的连接边是绿色
         if(menuShowKeyFrames || menuShowGraph)
             mpMapDrawer->DrawKeyFrames(menuShowKeyFrames,menuShowGraph);
         //绘制地图点
+        //; 地图点分为红色和黑色
         if(menuShowPoints)
             mpMapDrawer->DrawMapPoints();
 
+        //; 完成当前帧的绘制结果
         pangolin::FinishFrame();
 
+        //; 截止到这里，orbslam利用pangolin绘制的左右侧面板的显示就刷新完成了
+        //; 下面是opencv显示实时跟踪的图像画面
+
         // step 4:绘制当前帧图像和特征点提取匹配结果
-        cv::Mat im = mpFrameDrawer->DrawFrame();
+        cv::Mat im = mpFrameDrawer->DrawFrame();  //; 当前帧要显示的图像，很简单
         cv::imshow("ORB-SLAM2: Current Frame",im);
         //NOTICE 注意对于我所遇到的问题,ORB-SLAM2是这样子来处理的
-        cv::waitKey(mT);
+        cv::waitKey(mT);   //; mT是根据配置文件中的相机帧率反算时间得到的
 
         // step 5 相应其他请求
         //复位按钮
