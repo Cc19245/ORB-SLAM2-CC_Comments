@@ -112,7 +112,7 @@ int main(int argc, char **argv)
 
         // Pass the image to the SLAM system
         // step 4.4 追踪当前图像
-        SLAM.TrackMonocular(im,tframe);
+        SLAM.TrackMonocular(im, tframe);
 
         // step 4.5 追踪完成,停止当前帧的图像计时, 并计算追踪耗时
 
@@ -157,8 +157,8 @@ int main(int argc, char **argv)
 
     // Save camera trajectory
     // step 7 保存TUM格式的相机轨迹
-    // 估计是单目时有尺度漂移, 而LGA GBA都只能优化关键帧使尺度漂移最小, 普通帧所产生的轨迹漂移这里无能为力, 我猜作者这样就只
-    // 保存了关键帧的位姿,从而避免普通帧带有尺度漂移的位姿对最终误差计算的影响
+    // 估计是单目时有尺度漂移, 而LGA GBA都只能优化关键帧使尺度漂移最小, 普通帧所产生的轨迹漂移这里无能
+    // 为力, 我猜作者这样就只保存了关键帧的位姿,从而避免普通帧带有尺度漂移的位姿对最终误差计算的影响
     SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
 
     return 0;
@@ -189,7 +189,6 @@ void LoadImages(const string &strImagePath, const string &strPathTimes,
             ss >> t;
             // 记录该图像的时间戳
             vTimeStamps.push_back(t/1e9);
-
         }
     }
 }
