@@ -1,34 +1,24 @@
-# ORB-SLAM2 超详细注释
+# ORB-SLAM2-CC_Comments
 
--by 计算机视觉life 公众号旗下开源学习小组：SLAM研习社
+## Introduction
 
+本仓库是 [ORB_SLAM2](https://github.com/raulmur/ORB_SLAM2) 的详细中文注释。在`Documents`文件夹下有《ORB-SLAM2源码解析学习手册》和我自己绘制的ORB-SLAM2的整个系统脑图mono_tum.cc为例分析.svg。
 
-附部分内容讲解视频：
+## Done
 
-[ORBSLAM2新手必看：简介、安装、运行](https://www.bilibili.com/video/BV1DV411z7mY)
+- 详细过一遍代码，除了Pangolin部分的代码，其他基本上都仔细看了并注释一遍
+- 以单目为例，分析整个系统的脑图，文件存放在`Documents/mono_tum.cc为例分析.svg`
 
-[ORBSLAM2源码讲解专题1：ORB特征点提取与均匀化策略](https://www.bilibili.com/video/BV1154y1D7tA)
+## TODO
 
-[ORBSLAM2源码讲解专题2：Oriented Fast神奇高效的代码实现方式](https://www.bilibili.com/video/BV1FZ4y1H7JH)
+- [ ] 再仔细去看一下多线程之间的交互问题
 
-[ORB-SLAM源码讲解专题3：ORBSLAM2的单目初始化](https://www.bilibili.com/video/BV1HT4y1j7W3)
+##  Acknowledgement
 
-[ORB-SLAM源码讲解专题4: 单目Tracking线程](https://www.bilibili.com/video/BV1Gt4y1D7HD)
-
-[ORBSLAM2源码讲解专题5：理解共视图、本质图、生成树](https://www.bilibili.com/video/BV1e54y1278y)
-
-[ORBSLAM2原理代码详解19- 图像描述子转化为BowVector和FeatureVector](https://www.bilibili.com/video/BV17K4y1Y7DJ)
-
-独家课程《ORB-SLAM2精讲：原理推导+逐行代码分析》！[点击查看](https://appafc4omci9700.h5.xiaoeknow.com)
-《ORB-SLAM2源码解析》学习手册下载
-SLAM交流群：添加微信 chichui502，备注：”昵称+学校/公司+研究方向“。请按照格式备注，否则不予通过。请勿在群内发送广告，否则会请出群，谢谢理解~
-课程大纲如下：
-![大纲](https://github.com/electech6/ORB_SLAM2_detailed_comments/blob/master/outline.png)
+- [ORB_SLAM2_detailed_comments](https://github.com/electech6/ORB_SLAM2_detailed_comments)
+- [ORB_SLAM2](https://github.com/raulmur/ORB_SLAM2) 
 
 
-关注公众号：计算机视觉life，第一时间获取SLAM、三维视觉干货
-
-![qrcode](https://github.com/electech6/ORBSLAM2_detailed_comments/blob/master/myqrcode.png)
 
 ----
 
@@ -209,21 +199,21 @@ This will create **libORB_SLAM2.so**  at *lib* folder and the executables **mono
   ```
   export ROS_PACKAGE_PATH=${ROS_PACKAGE_PATH}:PATH/ORB_SLAM2/Examples/ROS
   ```
-  
+
 2. Execute `build_ros.sh` script:
 
   ```
   chmod +x build_ros.sh
   ./build_ros.sh
   ```
-  
+
 ### Running Monocular Node
 For a monocular input from topic `/camera/image_raw` run node ORB_SLAM2/Mono. You will need to provide the vocabulary file and a settings file. See the monocular examples above.
 
   ```
   rosrun ORB_SLAM2 Mono PATH_TO_VOCABULARY PATH_TO_SETTINGS_FILE
   ```
-  
+
 ### Running Monocular Augmented Reality Demo
 This is a demo of augmented reality where you can use an interface to insert virtual cubes in planar regions of the scene.
 The node reads images from topic `/camera/image_raw`.
@@ -231,27 +221,27 @@ The node reads images from topic `/camera/image_raw`.
   ```
   rosrun ORB_SLAM2 MonoAR PATH_TO_VOCABULARY PATH_TO_SETTINGS_FILE
   ```
-  
+
 ### Running Stereo Node
 For a stereo input from topic `/camera/left/image_raw` and `/camera/right/image_raw` run node ORB_SLAM2/Stereo. You will need to provide the vocabulary file and a settings file. If you **provide rectification matrices** (see Examples/Stereo/EuRoC.yaml example), the node will recitify the images online, **otherwise images must be pre-rectified**.
 
   ```
   rosrun ORB_SLAM2 Stereo PATH_TO_VOCABULARY PATH_TO_SETTINGS_FILE ONLINE_RECTIFICATION
   ```
-  
+
 **Example**: Download a rosbag (e.g. V1_01_easy.bag) from the EuRoC dataset (http://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets). Open 3 tabs on the terminal and run the following command at each tab:
   ```
   roscore
   ```
-  
+
   ```
   rosrun ORB_SLAM2 Stereo Vocabulary/ORBvoc.txt Examples/Stereo/EuRoC.yaml true
   ```
-  
+
   ```
   rosbag play --pause V1_01_easy.bag /cam0/image_raw:=/camera/left/image_raw /cam1/image_raw:=/camera/right/image_raw
   ```
-  
+
 Once ORB-SLAM2 has loaded the vocabulary, press space in the rosbag tab. Enjoy!. Note: a powerful computer is required to run the most exigent sequences of this dataset.
 
 ### Running RGB_D Node
@@ -260,7 +250,7 @@ For an RGB-D input from topics `/camera/rgb/image_raw` and `/camera/depth_regist
   ```
   rosrun ORB_SLAM2 RGBD PATH_TO_VOCABULARY PATH_TO_SETTINGS_FILE
   ```
-  
+
 # 8. Processing your own sequences
 You will need to create a settings file with the calibration of your camera. See the settings file provided for the TUM and KITTI datasets for monocular, stereo and RGB-D cameras. We use the calibration model of OpenCV. See the examples to learn how to create a program that makes use of the ORB-SLAM2 library and how to pass images to the SLAM system. Stereo input must be synchronized and rectified. RGB-D input must be synchronized and depth registered.
 

@@ -1437,7 +1437,7 @@ void Initializer::Triangulate(
 	//别忘了我们更习惯用列向量来表示一个点的空间坐标
     x3D = vt.row(3).t();
 	//为了符合其次坐标的形式，使最后一维为1
-    x3D = x3D.rowRange(0,3)/x3D.at<float>();3
+    x3D = x3D.rowRange(0,3)/x3D.at<float>(3);
 }
 
 
